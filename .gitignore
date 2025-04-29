@@ -1,0 +1,39 @@
+# Excel temporary files
+~$*.xlsm
+*.bak
+
+# VBA temporary files (if any generated)
+*.log
+*.tmp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# User-specific configuration (API key should NOT be in the repo)
+# Although the key path points outside, add pattern just in case
+*openai_key.txt
+
+# Build artifacts or local output (if any)
+/output/
+/dist/
+
+# Cache files (if exported separately, though current cache is in-sheet)
+*.cache
+
+# Python virtual environment (if used for related scripts)
+venv/
+*.pyc
+__pycache__/
+
+# IDE / Editor specific files
+.vscode/
+*.suo
+*.user
+
+# Log files (if separate files are generated, RunLog sheet IS tracked via xlsm)
+*.log
+RunLog.txt
+
+# Example/Sample outputs that shouldn't be committed directly
+# samples/sample_output.xlsx # Keep if it's a clean TEMPLATE, ignore if it contains run data
