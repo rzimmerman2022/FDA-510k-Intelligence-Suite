@@ -60,7 +60,7 @@ Private Sub Workbook_Open()
         ' GoTo OpenCleanExit ' Option to stop
     Else
         ' Call RefreshPowerQuery with the table object
-        refreshSuccess = mod_510k_Processor.RefreshPowerQuery(tblData)
+        refreshSuccess = mod_DataIO.RefreshPowerQuery(tblData) ' Corrected module reference
         If refreshSuccess Then
             Debug.Print Time & " - Power Query refresh step completed for table '" & tblData.Name & "'."
         Else
