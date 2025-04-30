@@ -1,9 +1,48 @@
-' =========  mod_Weights.bas  =========
-' Purpose: Handles loading and caching of weight and keyword tables from the "Weights" sheet.
-' Key APIs exposed: LoadAll, GetACWeights, GetSTWeights, GetPCWeights, GetHighValueKeywords, etc.
-' Maintainer: [Your Name/Team]
-' Dependencies: mod_Logger, mod_DebugTraceHelpers
-' =====================================
+' ==========================================================================
+' Module      : mod_Weights
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This module manages the loading and in-memory storage of
+'               scoring weights and keyword lists used by the scoring engine
+'               (mod_Score). It reads data from predefined Excel tables
+'               (e.g., "tblACWeights", "tblKeywords") located on the worksheet
+'               specified by WEIGHTS_SHEET_NAME in mod_Config. The loaded data
+'               (weights into Dictionaries, keywords into Collections) is stored
+'               in private module-level variables. Public accessor functions
+'               provide read-only access to this cached data for other modules.
+'
+' Key Functions:
+'               - LoadAll: Orchestrates the loading of all defined weight/keyword
+'                 tables from the specified worksheet. Handles errors and logs
+'                 success/failure for each table. Checks for critical load failures.
+'               - GetACWeights, GetSTWeights, GetPCWeights: Public accessors
+'                 returning the loaded weight dictionaries.
+'               - GetHighValueKeywords, GetNFCosmeticKeywords, etc.: Public
+'                 accessors returning the loaded keyword collections.
+'
+' Private Helpers:
+'               - LoadTableToDict: Loads data from a 2-column table into a
+'                 Scripting.Dictionary object.
+'               - LoadTableToList: Loads data from the first column of a table
+'                 into a Collection object.
+'
+' Dependencies: - mod_Logger: For logging loading progress and errors.
+'               - mod_DebugTraceHelpers: For detailed debug tracing.
+'               - Assumes specific table names exist on the weights sheet.
+'               - Requires Scripting.Dictionary object.
+'               - Requires Collection object.
+'               - Requires System.Collections.ArrayList object (in CheckKeywords).
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_Weights"
 

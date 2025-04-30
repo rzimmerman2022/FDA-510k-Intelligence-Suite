@@ -1,10 +1,51 @@
-' =========  mod_Schema.bas  =========
-' Purpose: Handles table schema operations, including column index mapping,
-'          safe data retrieval by column name, and header validation.
-' Key APIs exposed: GetColumnIndices, ColumnExistsInMap, SafeGetString, SafeGetVariant, etc.
-' Maintainer: [Your Name/Team]
-' Dependencies: mod_Logger, mod_DebugTraceHelpers
-' =====================================
+' ==========================================================================
+' Module      : mod_Schema
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This module provides functions for managing and interacting
+'               with table schemas, primarily focusing on mapping column
+'               header names to their corresponding indices within a data
+'               table or array. It includes robust handling for potential
+'               duplicate header names and provides safe methods for
+'               retrieving data based on column names rather than fixed
+'               indices, enhancing code resilience against changes in
+'               table structure. It also includes validation checks for
+'               required columns.
+'
+' Key Functions:
+'               - GetColumnIndices: Maps header names to column indices,
+'                 handling duplicates and checking for required columns.
+'               - ColumnExistsInMap: Checks if a base column name exists
+'                 in the generated map (handling Name#Index format).
+'               - SafeGetString/SafeGetVariant: Retrieves data from an
+'                 array using the column map, returning default values
+'                 if the column is not found or an error occurs.
+'               - SafeGetColIndex: Finds the correct column index from the
+'                 map, handling potential Name#Index format for duplicates.
+'               - ConcatArrays: Simple utility to combine two arrays.
+'
+' Dependencies: - mod_Logger: For logging significant events and errors.
+'               - mod_DebugTraceHelpers: For detailed debug tracing.
+'               - Assumes specific required column names are defined within
+'                 the GetColumnIndices function (or passed as parameters).
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' 2025-04-30  Cline (AI)      - Corrected "ByRef argument type mismatch" in
+'                               GetColumnIndices by changing Dim reqCol As Variant
+'                               to Dim reqCol As String. (REVERTED below)
+' 2025-04-30  Cline (AI)      - Reverted Dim reqCol back to Variant to fix "For Each
+'                               control variable must be Variant or Object" error.
+'                             - Added CStr() conversion when calling ColumnExistsInMap
+'                               to resolve original ByRef mismatch.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_Schema"
 
@@ -63,9 +104,10 @@ Public Function GetColumnIndices(headerRange As Range) As Object ' Scripting.Dic
 
     ' --- Check for missing REQUIRED columns (using base names) ---
     Dim allRequiredCols As Variant: allRequiredCols = ConcatArrays(requiredBaseCols, requiredOutputCols)
-    Dim reqCol As Variant
+    Dim reqCol As Variant ' Must be Variant for For Each loop over array
     For Each reqCol In allRequiredCols
-        If Not ColumnExistsInMap(dict, reqCol) Then
+        ' Explicitly convert reqCol (Variant) to String when calling ColumnExistsInMap
+        If Not ColumnExistsInMap(dict, CStr(reqCol)) Then
             missingCols = missingCols & vbCrLf & " - " & reqCol
         End If
     Next reqCol

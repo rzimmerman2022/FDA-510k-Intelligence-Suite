@@ -1,3 +1,48 @@
+' ==========================================================================
+' Module      : ModuleManager
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : N/A (Utility Module)
+' ==========================================================================
+' Description : This module provides utility functions for managing the VBA
+'               code modules within the project itself. It facilitates exporting
+'               modules from the VBE to external files (for version control like Git)
+'               and importing them back into the VBE from those files. It includes
+'               logic to handle potential auto-renaming issues by the VBE during
+'               import and allows skipping specific folders (e.g., "_legacy").
+'               It also provides a function to copy exported files back to the
+'               source directory after review.
+'
+'               NOTE: This module relies on hardcoded folder paths (SOURCE_FOLDER,
+'               EXPORT_FOLDER) which may need adjustment depending on the
+'               development environment setup. It also requires a reference to
+'               'Microsoft Scripting Runtime' for Dictionary and FileSystemObject.
+'
+' Key Functions:
+'               - ExportAllModules: Exports .bas, .cls, .frm files to EXPORT_FOLDER.
+'               - ImportAllModules: Removes existing modules and imports from
+'                 SOURCE_FOLDER, attempting to preserve original VB_Names.
+'               - UpdateSourceFromExport: Copies files from EXPORT_FOLDER to
+'                 SOURCE_FOLDER (overwrites).
+'
+' Private Helpers:
+'               - MakeNestedFolders: Creates directory structures.
+'               - GatherFiles: Recursively finds module files, extracts VB_Name.
+'               - ReadText: Reads file content with specified encoding.
+'               - ParseVBName: Extracts the VB_Name attribute from file content.
+'
+' Dependencies: - Requires reference to 'Microsoft Scripting Runtime'.
+'               - Requires reference to 'Microsoft Visual Basic for Applications Extensibility 5.3'.
+'               - Relies on hardcoded SOURCE_FOLDER and EXPORT_FOLDER paths.
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "ModuleManager"
 

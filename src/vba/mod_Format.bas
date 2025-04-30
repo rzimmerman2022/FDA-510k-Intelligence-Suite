@@ -1,10 +1,57 @@
-' =========  mod_Format.bas  =========
-' Purpose: Handles all presentation work for the 510(k) data table,
-'          including column addition, number formatting, styling, sorting, etc.
-' Key APIs exposed: AddScoreColumnsIfNeeded, ApplyAll
-' Maintainer: [Your Name/Team]
-' Dependencies: mod_Logger, mod_DebugTraceHelpers, mod_Schema, mod_Config
-' =====================================
+' ==========================================================================
+' Module      : mod_Format
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This module is responsible for applying all visual formatting
+'               and presentation adjustments to the main data table after
+'               scoring is complete. This includes adding necessary output
+'               columns, applying number formats, setting table styles,
+'               applying conditional formatting (e.g., category colors),
+'               reorganizing columns into a standard layout, sorting the
+'               data, and freezing panes for usability.
+'
+' Key Functions:
+'               - AddScoreColumnsIfNeeded: Ensures all required output columns
+'                 exist in the table before processing.
+'               - ApplyAll: Orchestrates the entire formatting sequence by
+'                 calling various private helper subroutines.
+'
+' Private Helpers:
+'               - ApplyNumberFormats: Sets formats like percentage, date, number.
+'               - FormatTableLook: Applies Excel table styles and autofits columns.
+'               - FormatCategoryColors: Applies conditional background/font colors
+'                 based on the 'Category' column value.
+'               - CreateShortNamesAndComments: (Placeholder) Intended for adding
+'                 comments to headers with shortened names.
+'               - ReorganizeColumns: Arranges columns into a predefined order.
+'               - SortDataTable: Sorts the table based on defined key(s).
+'               - FreezeHeaderAndFirstColumns: Freezes top row and initial columns.
+'
+' Dependencies: - mod_Logger: For logging events and errors.
+'               - mod_DebugTraceHelpers: For detailed debug tracing.
+'               - mod_Schema: Used indirectly via column name constants/lookups.
+'               - mod_Config: For constants like sort keys or desired column order
+'                 (though some are currently hardcoded).
+'               - mod_Utils: For utility functions like GetBrightness.
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' 2025-04-30  Cline (AI)      - Corrected "Syntax error" in SortDataTable by changing
+'                               Const SORT_ORDER As XlSortOrder to Dim SORT_ORDER
+'                               and assigning value separately. Typed Consts are
+'                               not allowed within procedures.
+' 2025-04-30  Cline (AI)      - Added DeleteDuplicateColumns sub and call in ApplyAll.
+' 2025-04-30  Cline (AI)      - Updated desired column order in ReorganizeColumns.
+' 2025-04-30  Cline (AI)      - Commented out FreezeHeaderAndFirstColumns call in ApplyAll.
+' 2025-04-30  Cline (AI)      - Added final AutoFit call in ApplyAll.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_Format"
 
@@ -61,13 +108,24 @@ Public Function ApplyAll(tbl As ListObject, wsData As Worksheet) As Boolean
     TraceEvt lvlINFO, PROC_NAME, "Start formatting sequence", "Table=" & tbl.Name
 
     ' --- Call individual formatting routines ---
+    Call DeleteDuplicateColumns(tbl) ' Delete known duplicates first
     Call ApplyNumberFormats(tbl)
-    Call FormatTableLook(tbl)
-    Call FormatCategoryColors(tbl)
-    Call CreateShortNamesAndComments(tbl) ' Must run after data write, before reorg/sort
-    Call ReorganizeColumns(tbl)
+    Call FormatTableLook(tbl) ' Includes initial AutoFit
+    Call FormatCategoryColors(tbl) ' Apply colors based on Category column name
+    Call CreateShortNamesAndComments(tbl) ' Placeholder
+    Call ReorganizeColumns(tbl) ' Move columns to desired order
     Call SortDataTable(tbl)
-    Call FreezeHeaderAndFirstColumns(wsData)
+    ' Call FreezeHeaderAndFirstColumns(wsData) ' Commented out as requested
+
+    ' --- Final Autofit after all changes ---
+    On Error Resume Next ' Be lenient with final autofit
+    tbl.Range.Columns.AutoFit
+    If Err.Number <> 0 Then
+        LogEvt PROC_NAME, lgWARN, "Error during final AutoFit: " & Err.Description, "Table=" & tbl.Name
+        TraceEvt lvlWARN, PROC_NAME, "Error during final AutoFit", "Table=" & tbl.Name & ", Err=" & Err.Description
+        Err.Clear
+    End If
+    On Error GoTo ApplyAllError ' Restore handler
 
     ApplyAll = True ' Success
     LogEvt PROC_NAME, lgINFO, "Formatting sequence completed successfully for table: " & tbl.Name
@@ -86,6 +144,44 @@ End Function
 ' ==========================================================================
 ' ===                  PRIVATE FORMATTING HELPERS                      ===
 ' ==========================================================================
+
+Private Sub DeleteDuplicateColumns(tbl As ListObject)
+    ' Purpose: Deletes specific known duplicate columns that might appear.
+    Const PROC_NAME As String = "mod_Format.DeleteDuplicateColumns"
+    Dim colsToDelete As Variant: colsToDelete = Array("Category 2", "FDA Link 2", "Score Percent 2", "Final_Score 2") ' Add others if needed
+    Dim colName As Variant
+    Dim lc As ListColumn
+    Dim i As Integer
+
+    LogEvt PROC_NAME, lgDETAIL, "Checking for duplicate columns to delete...", "Table=" & tbl.Name
+    TraceEvt lvlDET, PROC_NAME, "Start checking for duplicate columns", "Table=" & tbl.Name
+
+    ' Loop backwards when deleting columns to avoid index issues
+    For i = tbl.ListColumns.Count To 1 Step -1
+        Set lc = tbl.ListColumns(i)
+        For Each colName In colsToDelete
+            If lc.Name = colName Then
+                On Error Resume Next ' Handle error during delete
+                lc.Delete
+                If Err.Number <> 0 Then
+                    LogEvt PROC_NAME, lgWARN, "Could not delete duplicate column: " & colName, "Table=" & tbl.Name & ", Err=" & Err.Description
+                    TraceEvt lvlWARN, PROC_NAME, "Could not delete duplicate column", "Table=" & tbl.Name & ", Column=" & colName & ", Err=" & Err.Description
+                    Err.Clear
+                Else
+                    LogEvt PROC_NAME, lgINFO, "Deleted duplicate column: " & colName, "Table=" & tbl.Name
+                    TraceEvt lvlINFO, PROC_NAME, "Deleted duplicate column", "Table=" & tbl.Name & ", Column=" & colName
+                End If
+                On Error GoTo 0 ' Restore default error handling
+                Exit For ' Move to next column index once a match is found and deleted
+            End If
+        Next colName
+        Set lc = Nothing
+    Next i
+
+    LogEvt PROC_NAME, lgDETAIL, "Duplicate column check complete.", "Table=" & tbl.Name
+    TraceEvt lvlDET, PROC_NAME, "Duplicate column check complete", "Table=" & tbl.Name
+End Sub
+
 
 Private Sub ApplyNumberFormats(tbl As ListObject)
     ' Purpose: Applies specific number formats to relevant columns.
@@ -255,7 +351,14 @@ Private Sub ReorganizeColumns(tbl As ListObject)
     Const PROC_NAME As String = "mod_Format.ReorganizeColumns"
     Dim desiredOrder As Variant, currentPos As Long, targetPos As Long, colName As Variant, lc As ListColumn
     ' --- Define Desired Order (Consider moving to mod_Config) ---
-    desiredOrder = Array("K_Number", "Applicant", "DeviceName", "Category", "Final_Score", "Score_Percent", "CompanyRecap", "DecisionDate", "DateReceived", "ProcTimeDays", "AC", "PC", "SubmType", "Country", "Statement", "FDA_Link", "AC_Wt", "PC_Wt", "KW_Wt", "ST_Wt", "PT_Wt", "GL_Wt", "NF_Calc", "Synergy_Calc")
+    ' Updated order based on user feedback 2025-04-30
+    desiredOrder = Array( _
+        "K_Number", "DecisionDate", "Applicant", "DeviceName", "CompanyRecap", _
+        "Score_Percent", "Category", "FDA_Link", _
+        "Final_Score", "DateReceived", "ProcTimeDays", "AC", "PC", "SubmType", "Country", "Statement", _
+        "AC_Wt", "PC_Wt", "KW_Wt", "ST_Wt", "PT_Wt", "GL_Wt", "NF_Calc", "Synergy_Calc" _
+    )
+    ' Note: Any columns *not* listed here will end up at the far right.
 
     On Error GoTo ReorgError
     LogEvt PROC_NAME, lgDETAIL, "Reorganizing columns...", "Table=" & tbl.Name
@@ -308,7 +411,8 @@ Private Sub SortDataTable(tbl As ListObject)
 
     ' --- Define Sort Key (Consider moving to mod_Config) ---
     Const SORT_COLUMN_NAME As String = "Final_Score"
-    Const SORT_ORDER As XlSortOrder = xlDescending
+    Dim SORT_ORDER As XlSortOrder ' Cannot use typed Const inside Sub
+    SORT_ORDER = xlDescending
 
     On Error Resume Next ' Check if sort column exists
     Set sortCol = tbl.ListColumns(SORT_COLUMN_NAME).Range
@@ -345,26 +449,31 @@ End Sub
 Private Sub FreezeHeaderAndFirstColumns(ws As Worksheet)
     ' Purpose: Freezes the header row and the first few columns for better navigation.
     Const PROC_NAME As String = "mod_Format.FreezeHeaderAndFirstColumns"
-    Const COLUMNS_TO_FREEZE As Long = 3 ' e.g., K_Number, Applicant, DeviceName
+    ' Const COLUMNS_TO_FREEZE As Long = 3 ' No longer used
     On Error Resume Next ' Be lenient with UI operations
-    LogEvt PROC_NAME, lgDETAIL, "Freezing panes...", "Sheet=" & ws.Name
-    TraceEvt lvlDET, PROC_NAME, "Start freezing panes", "Sheet=" & ws.Name
+    LogEvt PROC_NAME, lgDETAIL, "Freezing panes (DISABLED)...", "Sheet=" & ws.Name
+    TraceEvt lvlDET, PROC_NAME, "Start freezing panes (DISABLED)", "Sheet=" & ws.Name
 
-    ws.Activate ' Must activate sheet to set freeze panes
-    ActiveWindow.FreezePanes = False ' Unfreeze first
-    With ws.Cells(2, COLUMNS_TO_FREEZE + 1) ' Cell below header, right of columns to freeze
-        .Activate ' Select the cell to set the freeze boundary
-        ActiveWindow.FreezePanes = True
-    End With
-    ws.Range("A1").Activate ' Select A1 after freezing
+    ' --- Ensure panes are unfrozen ---
+    If ActiveWindow.FreezePanes Then ActiveWindow.FreezePanes = False
+
+    ' --- Original Freezing Logic (Commented Out) ---
+    ' ws.Activate ' Must activate sheet to set freeze panes
+    ' ActiveWindow.FreezePanes = False ' Unfreeze first
+    ' With ws.Cells(2, COLUMNS_TO_FREEZE + 1) ' Cell below header, right of columns to freeze
+    '     .Activate ' Select the cell to set the freeze boundary
+    '     ActiveWindow.FreezePanes = True
+    ' End With
+    ' ws.Range("A1").Activate ' Select A1 after freezing
+    ' --- End Original Logic ---
 
     If Err.Number <> 0 Then
-        LogEvt PROC_NAME, lgWARN, "Error freezing panes: " & Err.Description, "Sheet=" & ws.Name
-        TraceEvt lvlWARN, PROC_NAME, "Error freezing panes", "Sheet=" & ws.Name & ", Err=" & Err.Description
+        LogEvt PROC_NAME, lgWARN, "Error unfreezing panes: " & Err.Description, "Sheet=" & ws.Name
+        TraceEvt lvlWARN, PROC_NAME, "Error unfreezing panes", "Sheet=" & ws.Name & ", Err=" & Err.Description
         Err.Clear
     Else
-        LogEvt PROC_NAME, lgDETAIL, "Panes frozen.", "Sheet=" & ws.Name
-        TraceEvt lvlDET, PROC_NAME, "Panes frozen", "Sheet=" & ws.Name
+        LogEvt PROC_NAME, lgDETAIL, "Panes unfrozen (or already unfrozen).", "Sheet=" & ws.Name
+        TraceEvt lvlDET, PROC_NAME, "Panes unfrozen", "Sheet=" & ws.Name
     End If
     On Error GoTo 0 ' Restore default
 End Sub

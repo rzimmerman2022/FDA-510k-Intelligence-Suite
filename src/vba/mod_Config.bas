@@ -1,8 +1,38 @@
-' =========  mod_Config.bas  =========
-' Purpose: Holds all global configuration constants for the 510k Intelligence Suite.
-' Key APIs exposed: Public constants for sheet names, paths, scoring defaults, API settings, etc.
-' Maintainer: [Your Name/Team]
-' =====================================
+' ==========================================================================
+' Module      : mod_Config
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See VERSION_INFO constant below
+' ==========================================================================
+' Description : This module centralizes all global configuration settings
+'               for the FDA 510(k) Intelligence Suite application. It uses
+'               Public Constants to define essential parameters such as
+'               worksheet names, file paths (like the API key location),
+'               default values for scoring weights, OpenAI API settings
+'               (URL, model, limits), and UI/formatting parameters.
+'               Centralizing configuration here makes it easier to update
+'               settings without searching through multiple code modules.
+'
+' Key APIs    : Exposes numerous Public Const values accessible project-wide.
+'               Key constants include:
+'               - MAINTAINER_USERNAME: Enables special features. **NEEDS UPDATE**
+'               - DATA_SHEET_NAME, WEIGHTS_SHEET_NAME, CACHE_SHEET_NAME, LOG_SHEET_NAME
+'               - API_KEY_FILE_PATH: Location of the OpenAI key. **CHECK PATH**
+'               - Various DEFAULT_*_WEIGHT constants for scoring.
+'               - OPENAI_* constants for API interaction.
+'               - VERSION_INFO: Application version string.
+'
+' Dependencies: None (This module typically has no dependencies on other
+'               code modules, but other modules depend on it).
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_Config"
 

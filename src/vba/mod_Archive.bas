@@ -1,9 +1,39 @@
-' =========  mod_Archive.bas  =========
-' Purpose: Handles the end-of-run archiving of the processed data sheet.
-' Key APIs exposed: ArchiveIfNeeded
-' Maintainer: [Your Name/Team]
-' Dependencies: mod_Logger, mod_DebugTraceHelpers, mod_DataIO (for CleanupDuplicateConnections)
-' =====================================
+' ==========================================================================
+' Module      : mod_Archive
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This module manages the archiving process for the processed
+'               510(k) data. When triggered (typically once per month), it
+'               creates a static copy of the main data sheet, naming it
+'               according to the processed month (e.g., "Apr-2025"). It
+'               converts the table object on the newly created archive sheet
+'               into a static range to preserve the data snapshot and prevent
+'               accidental refreshes. It also handles the cleanup of potential
+'               duplicate Power Query connections that can be created when
+'               copying worksheets containing query tables.
+'
+' Key Function: ArchiveIfNeeded(tblData As ListObject, archiveSheetName As String) As Boolean
+'               - Performs the sheet copy, rename, table unlist, and connection
+'                 cleanup operations. Called conditionally by the main
+'                 processing routine in mod_510k_Processor.
+'
+' Dependencies: - mod_Logger: For logging archiving steps and errors.
+'               - mod_DebugTraceHelpers: For detailed debug tracing.
+'               - mod_DataIO: Specifically calls CleanupDuplicateConnections
+'                 to manage Power Query connections after sheet copy.
+'               - Assumes the main data table object (tblData) and the
+'                 desired archive sheet name are passed correctly.
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_Archive"
 

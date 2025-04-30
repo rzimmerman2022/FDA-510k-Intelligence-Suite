@@ -1,10 +1,54 @@
-' =========  mod_Score.bas  =========
-' Purpose: Handles the calculation of the 510(k) score for individual records,
-'          including keyword checks and weight lookups.
-' Key APIs exposed: Calculate510kScore
-' Maintainer: [Your Name/Team]
-' Dependencies: mod_Logger, mod_DebugTraceHelpers, mod_Config, mod_Weights, mod_Schema
-' =====================================
+' ==========================================================================
+' Module      : mod_Score
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This module encapsulates the core scoring logic for evaluating
+'               FDA 510(k) submission records. It calculates a composite score
+'               based on various weighted factors derived from the input data.
+'               Factors include Advisory Committee (AC), Product Code (PC),
+'               Submission Type (ST), Processing Time (PT), Geographic Location (GL),
+'               and the presence of specific keywords in device names/statements.
+'               It also applies negative factors (NF) for certain device types
+'               (e.g., cosmetic, diagnostic) unless overridden by therapeutic
+'               keywords, and adds a synergy bonus for specific combinations.
+'               The final score determines a qualitative category (High, Moderate, etc.).
+'
+' Key Function:
+'               - Calculate510kScore: Takes a data array row and column map,
+'                 performs lookups and calculations, and returns an array
+'                 containing the raw score, category, and individual weight/factor
+'                 components used in the calculation.
+'
+' Private Helpers:
+'               - CheckKeywords: Uses regular expressions (late-bound VBScript.RegExp)
+'                 to efficiently check if any keywords from a given collection
+'                 exist within a combined text string (DeviceName + Statement).
+'                 Includes basic regex character escaping.
+'               - GetWeightFromDict: Safely retrieves a numeric weight from a
+'                 dictionary, returning a default value if the key is missing
+'                 or the stored value is not numeric.
+'
+' Dependencies: - mod_Logger: For logging errors during scoring.
+'               - mod_DebugTraceHelpers: For detailed debug tracing.
+'               - mod_Config: For default weights, negative factor values,
+'                 synergy bonus value, and geographic weights.
+'               - mod_Weights: Provides access to loaded dictionaries/collections
+'                 containing AC, PC, ST weights and various keyword lists.
+'               - mod_Schema: For safely retrieving data from the input array
+'                 using column names via the provided column map.
+'               - Requires VBScript.RegExp object (late binding).
+'               - Requires System.Collections.ArrayList object (late binding).
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_Score"
 

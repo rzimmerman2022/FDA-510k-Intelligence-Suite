@@ -1,10 +1,44 @@
+' ==========================================================================
+' Module      : mod_Debug
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This module provides basic helper subroutines primarily
+'               intended for debugging during development. It includes
+'               functionality to dump table headers to the Immediate Window
+'               and a simple tracing mechanism that writes messages to a
+'               dedicated "DebugTrace" worksheet.
+'
+'               NOTE: The DebugTrace subroutine appears to be a separate,
+'               simpler logging mechanism compared to the more comprehensive
+'               TraceEvt system implemented in mod_DebugTraceHelpers.
+'               Consider consolidating tracing efforts into mod_DebugTraceHelpers
+'               in future refactoring.
+'
+' Key Functions:
+'               - DumpHeaders: Prints the column names and indices of the
+'                 first table found on the "CurrentMonthData" sheet to the
+'                 VBA Immediate Window. Useful for verifying column order.
+'               - DebugTrace: Writes a timestamped message with a tag and
+'                 optional caller info to the "DebugTrace" sheet, creating
+'                 the sheet if it doesn't exist.
+'
+' Dependencies: - Assumes a worksheet named "CurrentMonthData" exists for
+'                 DumpHeaders.
+'               - Interacts directly with Workbook sheets for DebugTrace.
+'               - Does not appear to have dependencies on other custom modules.
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_Debug"
-
-'========================================================
-' Module: mod_Debug
-' Contains helper subroutines for debugging purposes.
-'========================================================
 
 Sub DumpHeaders()
     ' Purpose: Prints the column order and names of the first table on the active sheet to the Immediate Window.

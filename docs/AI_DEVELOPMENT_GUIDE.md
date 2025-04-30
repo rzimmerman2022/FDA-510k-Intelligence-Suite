@@ -1,71 +1,100 @@
 # AI Development Guide - FDA 510(k) Intelligence Suite
 
-## 1. Purpose
+This document outlines best practices and specific requirements for developing and maintaining the VBA code within this project, particularly when utilizing AI assistance (like Cline). Adhering to these guidelines ensures code quality, maintainability, and consistency.
 
-This document outlines the process, context, and standard prompts used when collaborating with AI assistants (like Google Gemini, GitHub Copilot Chat, ChatGPT) during the development, debugging, and refinement of the Excel VBA-based FDA 510(k) Intelligence Suite. Its goal is to ensure consistency, provide necessary context for effective AI interaction, and streamline future AI-assisted development efforts.
+## 1. Core Principles
 
-## 2. Core Architecture Summary for AI Context
+*   **Modularity:** Respect the existing modular structure. Place new functionality in the most appropriate existing module or create a new, well-defined module if necessary.
+*   **Clarity:** Write clear, readable code. Use meaningful variable and procedure names.
+*   **Robustness:** Implement appropriate error handling (`On Error GoTo`, logging) for key operations. Use safe data access methods (e.g., `mod_Schema.SafeGetString`).
+*   **Configuration:** Centralize configuration settings (sheet names, defaults, API keys/paths) in `mod_Config` using `Public Const`. Avoid hardcoding values directly in procedural code.
+*   **Documentation:** Maintain high-quality documentation through standardized header comments and meaningful inline comments.
 
-When prompting an AI assistant, provide this summary:
+## 2. Coding Standards (VBA)
 
-"The project is an FDA 510(k) Lead Scoring tool built entirely within a single Excel `.xlsm` workbook. It uses:
-* **Power Query (M):** Fetches previous month's 510(k) data from the openFDA API dynamically. Code likely in `src/powerquery/FDA_510k_Query.pq`.
-* **VBA Modules:**
-    * `ThisWorkbook`: Handles `Workbook_Open` trigger, initiates refresh and processing.
-    * `mod_510k_Processor`: Main orchestration module. Contains `ProcessMonthly510k` (workflow control), `Calculate510kScore` (core scoring logic), caching functions (`GetCompanyRecap`, `Load/SaveCompanyCache`), parameter loading (`LoadWeightsAndKeywords`), formatting routines (`ReorganizeColumns`, `FormatTableLook`, etc.), archiving (`ArchiveMonth`), and various helpers. Interacts heavily with worksheet tables and data arrays.
-    * `mod_Logger`: Provides a performance-optimized, buffered logging system (`LogEvt`, `FlushLogBuf`) writing to a hidden `RunLog` sheet.
-* **Excel Sheets:** `CurrentMonthData` (PQ output, final results), `Weights` (parameter tables like `tblACWeights`, `tblKeywords`, `tblNFCosmeticKeywords`, etc.), `CompanyCache` (persistent recap storage), `RunLog` (hidden log).
-* **Key Libraries:** VBA references include `Scripting Runtime` (Dictionary, FileSystemObject), `Microsoft XML, v6.0` (ServerXMLHTTP for OpenAI), `WScript.Shell` (Environment Strings).
-* **Goal:** Automate fetching, scoring (based on configurable weights/rules/keywords), caching, formatting, and archiving 510(k) leads, providing results directly in Excel."
+*   **`Option Explicit`:** Mandatory at the top of every module to enforce variable declaration.
+*   **Variable Declaration:** Declare all variables using `Dim` (or `Private`/`Public` for module-level scope) with the most specific data type possible (e.g., `Dim ws As Worksheet`, `Dim count As Long`, `Dim name As String`). Avoid excessive use of `Variant` unless necessary (e.g., iterating arrays, handling diverse return types).
+*   **Naming Conventions:**
+    *   Procedures (Subs/Functions): `PascalCase` (e.g., `ProcessMonthly510k`, `LoadTableToDict`).
+    *   Local Variables: `camelCase` (e.g., `procStartTime`, `missingSheets`).
+    *   Constants: `ALL_CAPS_SNAKE_CASE` (e.g., `DATA_SHEET_NAME`, `API_KEY_FILE_PATH`).
+    *   Module-Level Private Variables: Use a prefix like `m_` or suffix (less common in VBA) if needed for clarity, otherwise `camelCase` is often sufficient if usage is clear (e.g., `dictCache` in `mod_Cache`).
+    *   Enums: Use a prefix for members (e.g., `lgINFO` for `LogLevel`, `lvlERROR` for `eTraceLvl`).
+*   **Indentation:** Use consistent indentation (e.g., 4 spaces) to clearly show code blocks (loops, conditionals, `With` blocks).
+*   **Scope:** Declare variables in the narrowest possible scope. Prefer local variables within procedures over module-level variables unless state needs to be maintained across calls.
+*   **Argument Passing:** Prefer passing arguments `ByVal` unless the procedure explicitly needs to modify the original variable passed by the caller (then use `ByRef`). Be explicit (`ByVal` or `ByRef`) rather than relying on the default (`ByRef`).
+*   **Error Handling:** Use `On Error GoTo <Label>` for structured error handling in significant procedures. Log errors using `mod_Logger.LogEvt` and/or `mod_DebugTraceHelpers.TraceEvt`. Use `On Error Resume Next` sparingly and only when you intend to check `Err.Number` immediately afterward or when failure of a specific line is non-critical and expected. Always restore default error handling with `On Error GoTo 0`.
+*   **Object Variables:** Always set object variables to `Nothing` when finished to release memory (e.g., `Set ws = Nothing`).
 
-## 3. Key Development Stages & AI Interaction Examples
+## 3. Commenting Requirements
 
-* **Initial Design:** Provided high-level requirements, constraints (initially Excel-only, later VBA allowed), desired workflow (PQ -> VBA Score -> Cache -> Archive), and data inputs/outputs. AI helped generate initial VBA function/sub skeletons and module structure.
-* **Power Query:** Provided draft M code or described requirements (dynamic dates, specific API endpoint, fields needed, calculations like ProcTimeDays). Asked AI to refine M code for robustness, error handling, and efficiency.
-* **VBA - Scoring Logic:** Provided scoring model details (weights AC, PC, KW, etc.; NF rules based on keywords; Synergy rules). Asked AI to implement `Calculate510kScore` function using lookups (dictionaries loaded from tables), keyword checks (collections), and the specified formula structure. *Crucial: AI needs the exact formula and NF/Synergy rules confirmed by the developer.*
-* **VBA - Caching & API:** Described caching requirement (in-memory dictionary, persistent sheet). Described optional OpenAI recap requirement (maintainer only, secure API key handling via `%APPDATA%`). Asked AI to implement `Load/SaveCompanyCache`, `GetCompanyRecap`, `GetCompanyRecapOpenAI` (including HTTP request structure). *Crucial: AI needs guidance on prompt engineering for OpenAI and acknowledgement that basic parsing needs replacement.*
-* **VBA - Workflow & Formatting:** Described desired `Workbook_Open` behavior, Day Guard logic, Archive logic, and specific final sheet formatting (column order, styles, borders, conditional colors, comments for long text, freeze panes). Asked AI to implement `ProcessMonthly510k` orchestration, `ReorganizeColumns`, `FormatTableLook`, `FormatCategoryColors`, `CreateShortNamesAndComments`, `FreezeHeaderAndKeyCols` and ensure correct call order.
-* **Debugging:** Provided specific compile error messages and screenshots (`AddComment` `Threaded` arg, duplicate declaration, `Next without For`, `End If without Block If`). Asked AI to identify the cause and provide corrected code snippets.
-* **Logging:** Requested robust logging solutions. Evaluated AI suggestions (simple vs. buffered). Asked AI to generate the `mod_Logger` code and integrate `LogEvt`/`FlushLogBuf` calls throughout the project.
-* **Documentation:** Asked AI to generate `.gitignore`, `README.md`, `ARCHITECTURE.md`, and this guide based on the project context and code.
-* **Version Control:** Used AI to generate `git commit` messages summarizing changes.
+### 3.1. Module Header Comment Block
 
-## 4. Standard Prompts & Context Provision
+**This is mandatory for every `.bas` and `.cls` module.** It provides essential context for anyone (human or AI) reading the code.
 
-Effective AI collaboration requires clear context:
+**Structure:**
 
-* **Role & Goal:** Start prompts with "Act as an expert VBA developer..." and state the specific task (e.g., "review this function for errors", "implement this logic", "refactor this code for performance").
-* **Provide Context:** Use the Architecture Summary (Section 2) or relevant parts. Explain *what* the specific function/module does in the overall workflow.
-* **Provide Code:** Paste the relevant VBA function, module (`.bas`/`.cls`), or M query (`.pq`) directly into the prompt or ensure the file is open in the VS Code editor if using integrated AI.
-* **Be Specific:**
-    * For errors: Provide the *exact* error message and the highlighted code line/block.
-    * For new features: Clearly define inputs, outputs, logic steps, and any constraints. Reference specific functions or variables to modify.
-    * For reviews: State *what* to review for (e.g., correctness, performance, error handling, best practices, adherence to requirements).
-* **Iterate:** Treat it as a conversation. Provide feedback on the AI's suggestions, ask clarifying questions, provide corrected information if the AI misunderstands.
+```vba
+' ==========================================================================
+' Module      : [Module Name (e.g., mod_DataIO, ThisWorkbook)]
+' Author      : [Original Author - Unknown, unless known]
+' Date        : [Original Date - Unknown, unless known]
+' Maintainer  : [Your Name (e.g., Cline (AI Assistant))]
+' Version     : [Link to version info, e.g., See mod_Config.VERSION_INFO or N/A]
+' ==========================================================================
+' Description : [Concise paragraph explaining the module's overall purpose,
+'               responsibilities, and role within the application architecture.]
+'
+' Key Functions/Procedures:
+'               - [Public Function/Sub Name 1]: [Brief description of its purpose.]
+'               - [Public Function/Sub Name 2]: [Brief description...]
+'               - ... (List primary public interfaces)
+'
+' Private Helpers: (Optional section if notable private functions exist)
+'               - [Private Function/Sub Name 1]: [Brief description...]
+'
+' Dependencies: - [List other custom modules this module relies on (e.g., mod_Logger, mod_Config).]
+'               - [List required external libraries/references (e.g., Scripting.Dictionary, MSXML2.ServerXMLHTTP).]
+'               - [Mention key assumptions (e.g., specific table names, sheet names).]
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' [YYYY-MM-DD]  [Your Name]     - [Clear, concise description of the change made.]
+' ... (Previous entries maintained chronologically)
+' ==========================================================================
+Option Explicit
+Attribute VB_Name = "[Module Name]" ' If applicable
+```
 
-**Example Review Prompt:** (See previous detailed prompt generated for VS Code AI)
+**Maintenance:**
 
-## 5. Handling AI Limitations
+*   **Read First:** Before modifying *any* code in a module, read its header comment thoroughly.
+*   **Update Revision History:** **Crucially, every time you make a functional change or fix within a module, add a new entry to the `Revision History` table.** Include the date (YYYY-MM-DD), your identifier ("Cline (AI)" or subsequent AI name), and a brief but clear description of the change. Keep entries chronological (newest usually added at the top or bottom depending on preference, but be consistent).
+*   **Update Other Sections:** If your changes alter the module's purpose, add/remove key functions, change dependencies, or modify assumptions, update the relevant sections (`Description`, `Key Functions`, `Dependencies`) accordingly.
 
-* **VBA Nuances:** AI might not always grasp subtle VBA object model behaviors, error handling nuances (`On Error`), or Excel-specific interactions. Developer oversight is crucial.
-* **Context Window:** Large codebases might exceed the AI's context window. Focus prompts on specific modules or functions. Provide summaries of related code if necessary.
-* **"Hallucinations":** AI might invent functions, methods, or arguments (like the `Threaded` argument for `AddComment` in older Excel). Always test AI-generated code thoroughly.
-* **Specificity:** AI performs best with specific instructions. Vague requests ("make it better") yield generic results.
+### 3.2. Inline Comments
 
-## 6. VBA Export/Import for Git & AI
+*   Use the single quote (`'`) for inline comments.
+*   Focus on explaining the **why**, not the **what**. Explain complex logic, assumptions, workarounds, or the reasoning behind a particular implementation choice.
+    *   *Bad:* `' Increment i` (Code `i = i + 1` is self-explanatory)
+    *   *Good:* `' Use late binding to avoid dependency on specific library version`
+    *   *Good:* `' Handle potential error if sheet doesn't exist before attempting delete`
+*   Keep comments concise and close to the code they describe.
+*   Update or remove comments when the code they refer to changes. Stale comments are misleading.
 
-* To use Git effectively and provide clean code context to AI assistants, VBA code should be exported from the Excel VBE:
-    * Right-click module/class/form/sheet in VBE Project Explorer -> `Export File...`
-    * Save as `.bas` (modules), `.cls` (classes, ThisWorkbook, Sheets), `.frm` (forms).
-    * Commit these text files to Git.
-* Provide the content of these exported files to the AI.
-* To import updated code:
-    * Remove the existing module/class/etc. from the VBE project.
-    * `File` -> `Import File...` -> Select the updated `.bas`/`.cls`/`.frm` file.
+## 4. AI Assistant Workflow
 
-## 7. Future Development
+1.  **Understand Task:** Clearly define the goal or problem to be solved.
+2.  **Analyze Context:** Review relevant module header comments, inline comments, and related code provided by the user or previous steps.
+3.  **Plan Changes:** Outline the necessary code modifications. Identify which modules/functions will be affected.
+4.  **Implement Changes:** Use the appropriate tools (`replace_in_file` preferred for targeted edits, `write_to_file` for new files or major rewrites).
+5.  **Update Documentation:**
+    *   Add a new entry to the `Revision History` in the header of **each modified module**.
+    *   Update other header sections (`Description`, `Dependencies`, etc.) if necessary.
+    *   Add/update inline comments for complex or non-obvious changes.
+6.  **Verify (Simulated):** Mentally review the changes against the requirements and coding standards.
+7.  **Present Result:** Use `attempt_completion` to report the changes made, including the documentation updates.
 
-* Use this guide and the `ARCHITECTURE.md` to brief AI assistants on the existing system before requesting modifications or new features.
-* Provide relevant sections of existing code when asking for changes.
-* Document new features or major changes in the `README.md` and `ARCHITECTURE.md`, potentially updating this guide as well.
-* Refer to the `RunLog` sheet for diagnosing issues before consulting AI.
+By following these guidelines, AI assistants can contribute effectively to the project while maintaining code quality and documentation standards.

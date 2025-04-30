@@ -189,9 +189,9 @@ Private Sub InitLogger()
 
     ' Log the start of the session using the new Enum member
     ' Note: This call itself uses LogEvt, so it must be correct.
-    ' Assuming mod_510k_Processor.VERSION_INFO is accessible
+    ' Assuming mod_Config.VERSION_INFO is accessible
     On Error Resume Next ' Avoid error if VERSION_INFO isn't ready yet
-    LogEvt "Logger", LogLevel.lgINFO, "Session started.", "Version=" & mod_510k_Processor.VERSION_INFO
+    LogEvt "Logger", LogLevel.lgINFO, "Session started.", "Version=" & mod_Config.VERSION_INFO ' Corrected module reference
     On Error GoTo 0
 End Sub
 
@@ -238,7 +238,7 @@ Private Function DebugModeOn() As Boolean
     On Error GoTo 0 ' Restore default error handling if needed
 
     ' Check Maintainer Status
-    If Not mod_510k_Processor.IsMaintainerUser() Then Exit Function
+    If Not mod_Utils.IsMaintainerUser() Then Exit Function ' Corrected module reference
 
     ' Check Named Range "DebugMode"
     On Error Resume Next ' Handle error if named range doesn't exist

@@ -1,10 +1,55 @@
-' =========  mod_Cache.bas  =========
-' Purpose: Manages the company recap cache, including loading from sheet,
-'          in-memory storage, saving back to sheet, and optional OpenAI integration.
-' Key APIs exposed: LoadCompanyCache, GetCompanyRecap, SaveCompanyCache
-' Maintainer: [Your Name/Team]
-' Dependencies: mod_Logger, mod_DebugTraceHelpers, mod_Config, mod_Utils (for IsMaintainerUser)
-' =====================================
+' ==========================================================================
+' Module      : mod_Cache
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This module handles the caching mechanism for company summary
+'               information ("recaps"). It maintains an in-memory dictionary
+'               (dictCache) populated from a persistent worksheet cache
+'               (defined by CACHE_SHEET_NAME in mod_Config). When a recap is
+'               requested via GetCompanyRecap, it first checks the memory cache.
+'               If not found, and if the user is a designated maintainer
+'               (checked via mod_Utils.IsMaintainerUser) and OpenAI integration
+'               is implicitly enabled, it attempts to fetch a summary from the
+'               OpenAI API using GetCompanyRecapOpenAI. The fetched or default
+'               recap is then added to the memory cache. The entire memory
+'               cache can be saved back to the worksheet using SaveCompanyCache.
+'               Helper functions manage API key retrieval and JSON string handling.
+'
+' Key Functions:
+'               - LoadCompanyCache: Loads data from the cache sheet into the
+'                 in-memory dictionary (dictCache).
+'               - GetCompanyRecap: Retrieves a company recap, utilizing the
+'                 cache and optionally calling OpenAI.
+'               - SaveCompanyCache: Writes the current in-memory cache back
+'                 to the persistent cache sheet.
+'
+' Private Helpers:
+'               - GetCompanyRecapOpenAI: Handles the specific logic for calling
+'                 the OpenAI API, including request formatting and response parsing.
+'               - GetAPIKey: Reads the OpenAI API key from a configured file path.
+'               - JsonEscape/JsonUnescape: Utilities for handling special characters
+'                 in JSON strings.
+'
+' Dependencies: - mod_Logger: For logging cache operations, hits/misses, and errors.
+'               - mod_DebugTraceHelpers: For detailed debug tracing.
+'               - mod_Config: For constants (cache sheet name, API URL, model,
+'                 API key path, default recap text, timeouts, max lengths).
+'               - mod_Utils: For checking maintainer status (IsMaintainerUser).
+'               - Requires Scripting.Dictionary object.
+'               - Requires MSXML2.ServerXMLHTTP.6.0 object for OpenAI calls.
+'               - Requires Scripting.FileSystemObject for API key file reading.
+'               - Requires WScript.Shell object for environment variable expansion.
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_Cache"
 

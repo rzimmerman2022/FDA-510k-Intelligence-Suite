@@ -1,3 +1,55 @@
+' ==========================================================================
+' Module      : mod_510k_Processor
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This module serves as the central orchestrator for the FDA
+'               510(k) lead scoring process. It coordinates the workflow,
+'               including data refresh, parameter loading (weights, keywords,
+'               cache), row-by-row scoring calculation, data write-back,
+'               formatting application, and conditional data archiving.
+'               It relies heavily on helper modules for specific tasks,
+'               promoting modularity and maintainability.
+'
+' Key Function: ProcessMonthly510k() - The main public subroutine that
+'               initiates and manages the entire processing pipeline.
+'               Typically called from Workbook_Open or a UI button.
+'
+' Dependencies: - mod_Logger: For logging events to the RunLog sheet.
+'               - mod_DebugTraceHelpers: For detailed debug tracing.
+'               - mod_Config: For global constants (sheet names, version).
+'               - mod_Schema: For data structure definitions and column mapping.
+'               - mod_DataIO: For data input/output operations (PQ refresh, table I/O).
+'               - mod_Weights: For loading and accessing scoring weights/keywords.
+'               - mod_Cache: For managing the company recap cache.
+'               - mod_Score: For calculating the 510(k) score for each record.
+'               - mod_Format: For applying formatting to the output data.
+'               - mod_Archive: For archiving processed data to monthly sheets.
+'               - mod_Utils: For miscellaneous utility functions (getting sheets, UI handling).
+'
+' Assumptions : - Specific Excel Tables exist on the "Weights" sheet.
+'               - A "CompanyCache" sheet exists for caching.
+'               - A "CurrentMonthData" sheet exists for Power Query output.
+'               - Required helper modules are present in the VBA project.
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' 2025-04-30  Cline (AI)      - Corrected undefined variable 'lgCRITICAL' to 'lgERROR'
+'                             in ProcessErrorHandler (using LogLevel enum).
+' 2025-04-30  Cline (AI)      - Corrected undefined variable 'lvlFATAL' to 'lvlERROR'
+'                             in ProcessErrorHandler (using eTraceLvl enum).
+' 2025-04-30  Cline (AI)      - Removed cleanup lines in CleanExit for module-level
+'                               variables now managed in other modules (e.g.,
+'                               dictACWeights, dictCache, keyword lists).
+' 2025-04-30  Cline (AI)      - Corrected undefined variable 'VERSION_INFO' by adding
+'                               module qualifier 'mod_Config.' in initial logging calls.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 '--- Code for Module: mod_510k_Processor ---
 Option Explicit
 Attribute VB_Name = "mod_510k_Processor"
@@ -73,8 +125,8 @@ Public Sub ProcessMonthly510k()
     ' --- Initialize Logging ---
     ' Uses lg... constants from mod_Logger's Public Enum LogLevel
     ' Uses lvl... constants from mod_DebugTraceHelpers' Public Enum eTraceLvl
-    LogEvt "ProcessStart", lgINFO, "ProcessMonthly510k Started", "Version=" & VERSION_INFO
-    TraceEvt lvlINFO, "ProcessMonthly510k", "Process Start", "Version=" & VERSION_INFO ' Use enum
+    LogEvt "ProcessStart", lgINFO, "ProcessMonthly510k Started", "Version=" & mod_Config.VERSION_INFO ' Qualified constant
+    TraceEvt lvlINFO, "ProcessMonthly510k", "Process Start", "Version=" & mod_Config.VERSION_INFO ' Qualified constant; Use enum
 
     ' --- Get Worksheet Objects Safely (Moved to mod_Utils) ---
     If Not mod_Utils.GetWorksheets(wsData, wsWeights, wsCache) Then GoTo CleanExit ' Exit handled by EnsureUIOn
@@ -351,8 +403,8 @@ Public Sub ProcessMonthly510k()
 ProcessErrorHandler:
     Dim errDesc As String: errDesc = Err.Description
     Dim errNum As Long: errNum = Err.Number
-    LogEvt "ProcessError", lgCRITICAL, "Unhandled Error #" & errNum & " in ProcessMonthly510k: " & errDesc
-    TraceEvt lvlFATAL, "ProcessMonthly510k", "FATAL ERROR", "Err=" & errNum & " - " & errDesc
+    LogEvt "ProcessError", lgERROR, "Unhandled Error #" & errNum & " in ProcessMonthly510k: " & errDesc ' Use lgERROR instead of lgCRITICAL
+    TraceEvt lvlERROR, "ProcessMonthly510k", "FATAL ERROR", "Err=" & errNum & " - " & errDesc ' Use lvlERROR instead of lvlFATAL
     MsgBox "An unexpected error occurred: " & vbCrLf & errDesc & vbCrLf & "Please check the RunLog sheet for details.", vbCritical, "Processing Error"
     ' Fall through to CleanExit
 
@@ -360,13 +412,15 @@ CleanExit:
     LogEvt "ProcessEnd", lgINFO, "ProcessMonthly510k Ended", "Duration=" & Format(Timer - startTime, "0.00") & "s"
     TraceEvt lvlINFO, "ProcessMonthly510k", "Process End", "Duration=" & Format(Timer - startTime, "0.00") & "s"
     Call mod_Utils.EnsureUIOn(originalCalcState) ' Use mod_Utils, restore original calc state
-    Set wsData = Nothing: Set wsWeights = Nothing: Set wsCache = Nothing: Set wsLog = Nothing
-    Set tblData = Nothing: Set colIndices = Nothing
-    Set dictACWeights = Nothing: Set dictSTWeights = Nothing: Set dictPCWeights = Nothing
-    Set highValKeywordsList = Nothing: Set nfCosmeticKeywordsList = Nothing
-    Set nfDiagnosticKeywordsList = Nothing: Set therapeuticKeywordsList = Nothing
-    Set dictCache = Nothing ' Clean up module-level object reference if it was used
-    ' Note: regex object is assumed to be handled within mod_Score now
+    ' --- Clean up local objects ---
+    Set wsData = Nothing
+    Set wsWeights = Nothing
+    Set wsCache = Nothing
+    Set wsLog = Nothing
+    Set tblData = Nothing
+    Set colIndices = Nothing
+    ' --- Module-level objects (like dictionaries in mod_Weights/mod_Cache) ---
+    ' --- are managed within their respective modules and don't need cleanup here ---
 End Sub
 
 ' ==========================================================================

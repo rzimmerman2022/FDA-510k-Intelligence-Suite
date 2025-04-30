@@ -1,4 +1,47 @@
-'=====  mod_DebugTraceHelpers  ===========================================
+' ==========================================================================
+' Module      : mod_DebugTraceHelpers
+' Author      : [Original Author - Unknown, Adapted from prompt]
+' Date        : 2025-04-29 (Initial Adaptation)
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This module provides a structured system for detailed debug
+'               tracing during development and troubleshooting. It allows
+'               developers to log events with different severity levels
+'               (using the eTraceLvl enum) to a dedicated "DebugTrace"
+'               worksheet. Tracing can be globally enabled/disabled and
+'               its verbosity controlled via the TRACE_ENABLED and TRACE_LEVEL
+'               constants defined at the top of this module. This offers more
+'               control and potentially less performance impact than simple
+'               Debug.Print statements or the basic DebugTrace in mod_Debug.
+'
+' Key Functions:
+'               - TraceEvt: The primary public subroutine used by other modules
+'                 to log a trace event. It checks the trace level against the
+'                 master setting before writing to the sheet.
+'               - ClearDebugTrace: A utility subroutine to clear the contents
+'                 of the DebugTrace sheet (keeping headers).
+'
+' Private Helpers:
+'               - LevelName: Converts the eTraceLvl enum value to a string
+'                 representation for logging.
+'
+' Configuration:
+'               - TRACE_ENABLED (Boolean): Master switch to turn tracing on/off.
+'               - TRACE_LEVEL (Long): Controls verbosity (0=Off, 1=Error, ..., 5=Spam).
+'               - TRACE_SHEET (String): Name of the worksheet used for tracing.
+'
+' Dependencies: - Interacts directly with Workbook sheets.
+'               - Does not appear to have dependencies on other custom modules.
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' 2025-04-29  [Unknown]       - Initial adaptation/creation of the module.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_DebugTraceHelpers"
 

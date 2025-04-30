@@ -1,9 +1,43 @@
+' ==========================================================================
+' Module      : ThisWorkbook (Class Module)
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This is the code module associated with the Excel Workbook
+'               object itself. It primarily contains event handler procedures
+'               that respond to workbook-level events.
+'
+' Key Procedures:
+'               - Workbook_Open(): Automatically executes when the workbook is
+'                 opened. Serves as the main entry point for the automated
+'                 510(k) processing workflow. It handles initial setup,
+'                 triggers the Power Query data refresh (via mod_DataIO),
+'                 and then calls the main processing orchestration routine
+'                 (mod_510k_Processor.ProcessMonthly510k). Includes error
+'                 handling specific to the opening sequence.
+'               - Workbook_BeforeClose(Cancel As Boolean): Executes just before
+'                 the workbook closes. Currently used to perform cleanup tasks,
+'                 specifically trimming the RunLog sheet using mod_Logger.TrimRunLog.
+'
+' Dependencies: - mod_DataIO: Calls RefreshPowerQuery.
+'               - mod_510k_Processor: Calls ProcessMonthly510k.
+'               - mod_Logger: Calls TrimRunLog.
+'               - Implicitly relies on constants/settings defined in mod_Config
+'                 via the modules it calls.
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' 2025-04-29  Cline (AI)      - Corrected module reference for RefreshPowerQuery call
+'                               (changed from mod_510k_Processor to mod_DataIO).
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "ThisWorkbook"
-
-' ==========================================================================
-' ===                  THISWORKBOOK MODULE CODE                          ===
-' ==========================================================================
 ' This code handles the automatic workbook events:
 ' - Workbook_Open: Entry point for the automated 510(k) processing
 ' - Workbook_BeforeClose: Performs cleanup operations like trimming the log

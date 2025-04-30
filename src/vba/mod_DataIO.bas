@@ -1,10 +1,41 @@
-' =========  mod_DataIO.bas  =========
-' Purpose: Handles data input/output operations, primarily Power Query refresh,
-'          sheet existence checks, and post-refresh connection cleanup.
-' Key APIs exposed: RefreshPowerQuery, SheetExists, CleanupDuplicateConnections
-' Maintainer: [Your Name/Team]
-' Dependencies: mod_Logger, mod_DebugTraceHelpers
-' =====================================
+' ==========================================================================
+' Module      : mod_DataIO
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This module encapsulates data input/output operations for the
+'               application. Its primary responsibilities include refreshing
+'               Power Query data sources associated with specified tables,
+'               checking if worksheets exist, writing VBA array data back into
+'               Excel ListObjects (tables), and cleaning up potentially
+'               duplicated Power Query connections that can occur when worksheets
+'               containing queries are copied (e.g., during archiving).
+'
+' Key Functions:
+'               - RefreshPowerQuery: Refreshes the specified ListObject's
+'                 associated QueryTable synchronously and attempts to disable
+'                 background refresh afterward.
+'               - SheetExists: Checks if a sheet with a given name exists.
+'               - CleanupDuplicateConnections: Attempts to identify and delete
+'                 duplicate Power Query connections based on naming patterns,
+'                 often needed after sheet copying.
+'               - ArrayToTable: Writes the contents of a 2D VBA array into
+'                 the DataBodyRange of a specified ListObject.
+'
+' Dependencies: - mod_Logger: For logging I/O operations and errors.
+'               - mod_DebugTraceHelpers: For detailed debug tracing.
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' 2025-04-30  Cline (AI)      - Ensure EnableRefresh is True before attempting refresh
+'                               in RefreshPowerQuery to fix "Refresh disabled" error.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_DataIO"
 
@@ -32,6 +63,16 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
         MsgBox "Error: Could not find QueryTable associated with table '" & targetTable.Name & "'.", vbCritical, "Refresh Error"
         Exit Function ' Exit, cannot refresh
     End If
+
+    ' --- Ensure refresh is enabled BEFORE attempting ---
+    On Error Resume Next ' Handle potential error setting property
+    qt.EnableRefresh = True
+    If Err.Number <> 0 Then
+        LogEvt PROC_NAME, lgWARN, "Could not set EnableRefresh=True before refresh for table '" & targetTable.Name & "'. Refresh might fail. Error: " & Err.Description
+        TraceEvt lvlWARN, PROC_NAME, "Failed to set EnableRefresh=True", "Table='" & targetTable.Name & "', Err=" & Err.Description
+        Err.Clear
+    End If
+    On Error GoTo RefreshErrorHandler ' Restore main handler
 
     ' Refresh synchronously
     qt.BackgroundQuery = False

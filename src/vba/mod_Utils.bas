@@ -1,9 +1,45 @@
-' =========  mod_Utils.bas  =========
-' Purpose: Provides miscellaneous utility functions used across the application.
-' Key APIs exposed: GetWorksheets, IsMaintainerUser, EnsureUIOn, GetBrightness
-' Maintainer: [Your Name/Team]
-' Dependencies: mod_Logger, mod_DebugTraceHelpers, mod_Config
-' =====================================
+' ==========================================================================
+' Module      : mod_Utils
+' Author      : [Original Author - Unknown]
+' Date        : [Original Date - Unknown]
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : This module provides a collection of miscellaneous utility
+'               functions that are used across various modules within the
+'               510(k) Intelligence Suite application. These functions handle
+'               common tasks such as safely retrieving worksheet objects,
+'               checking user permissions (maintainer status), ensuring Excel
+'               UI settings are restored correctly, and performing calculations
+'               like determining color brightness for contrast purposes.
+'
+' Key Functions:
+'               - GetWorksheets: Safely retrieves Worksheet objects for the
+'                 main data, weights, and cache sheets, handling errors if
+'                 any are missing.
+'               - IsMaintainerUser: Checks if the current Windows username
+'                 matches the MAINTAINER_USERNAME constant defined in mod_Config.
+'               - EnsureUIOn: Restores Application settings (ScreenUpdating,
+'                 StatusBar, Cursor, Calculation, EnableEvents) typically
+'                 called at the end of processes or in error handlers.
+'               - GetBrightness: Calculates the perceived brightness of an
+'                 RGB color value, useful for determining appropriate font color
+'                 (e.g., black or white) for readability against a background.
+'
+' Dependencies: - mod_Logger: For logging errors (e.g., missing worksheets).
+'               - mod_DebugTraceHelpers: For detailed debug tracing.
+'               - mod_Config: Relies on sheet name constants (DATA_SHEET_NAME, etc.)
+'                 and MAINTAINER_USERNAME.
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
+' 2025-04-30  Cline (AI)      - Corrected module reference for IsMaintainerUser
+'                               call within mod_Logger.DebugModeOn.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_Utils"
 
