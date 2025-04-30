@@ -1,4 +1,5 @@
 Option Explicit
+Attribute VB_Name = "ThisWorkbook"
 
 ' ==========================================================================
 ' ===                  THISWORKBOOK MODULE CODE                          ===
@@ -134,5 +135,3 @@ Private Sub Workbook_BeforeClose(Cancel As Boolean)
     
     ' Always let workbook close by not setting Cancel = True
 End Sub
-
-

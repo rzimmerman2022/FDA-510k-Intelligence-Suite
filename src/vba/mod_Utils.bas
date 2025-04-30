@@ -5,6 +5,7 @@
 ' Dependencies: mod_Logger, mod_DebugTraceHelpers, mod_Config
 ' =====================================
 Option Explicit
+Attribute VB_Name = "mod_Utils"
 
 Public Function GetWorksheets(ByRef wsData As Worksheet, ByRef wsWeights As Worksheet, ByRef wsCache As Worksheet) As Boolean
     ' Purpose: Safely gets required worksheet objects, logs errors if not found.

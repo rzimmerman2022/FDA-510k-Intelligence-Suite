@@ -1,5 +1,6 @@
 '=====  mod_DebugTraceHelpers  ===========================================
 Option Explicit
+Attribute VB_Name = "mod_DebugTraceHelpers"
 
 '--  MASTER SWITCH --------------------------------------------------------
 ' *** Set TRACE_ENABLED to True for detailed logging, False for production ***

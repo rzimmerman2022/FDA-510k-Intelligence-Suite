@@ -1,4 +1,5 @@
 Option Explicit
+Attribute VB_Name = "mod_Debug"
 
 '========================================================
 ' Module: mod_Debug
@@ -104,5 +105,3 @@ Public Sub DebugTrace(tag As String, msg As String)
     Set ws = Nothing ' Clean up object
 
 End Sub
-
-

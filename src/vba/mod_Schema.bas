@@ -6,6 +6,7 @@
 ' Dependencies: mod_Logger, mod_DebugTraceHelpers
 ' =====================================
 Option Explicit
+Attribute VB_Name = "mod_Schema"
 
 Public Function GetColumnIndices(headerRange As Range) As Object ' Scripting.Dictionary or Nothing
     ' Purpose: Creates a dictionary mapping column header names (handling duplicates) to their 1-based index.

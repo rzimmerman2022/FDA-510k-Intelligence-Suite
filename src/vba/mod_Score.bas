@@ -6,6 +6,7 @@
 ' Dependencies: mod_Logger, mod_DebugTraceHelpers, mod_Config, mod_Weights, mod_Schema
 ' =====================================
 Option Explicit
+Attribute VB_Name = "mod_Score"
 
 ' --- Module-Level Object for Regular Expressions (Late Binding) ---
 ' Moved here as CheckKeywords uses it

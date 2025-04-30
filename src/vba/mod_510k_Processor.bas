@@ -1,5 +1,6 @@
 '--- Code for Module: mod_510k_Processor ---
 Option Explicit
+Attribute VB_Name = "mod_510k_Processor"
 
 #Const REFACTOR_MODE = 0 '<<< Refactoring complete for this module's orchestration
 

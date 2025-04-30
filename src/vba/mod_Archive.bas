@@ -5,6 +5,7 @@
 ' Dependencies: mod_Logger, mod_DebugTraceHelpers, mod_DataIO (for CleanupDuplicateConnections)
 ' =====================================
 Option Explicit
+Attribute VB_Name = "mod_Archive"
 
 Public Function ArchiveIfNeeded(tblData As ListObject, archiveSheetName As String) As Boolean
     ' Purpose: Creates an archive copy of the data sheet if needed.

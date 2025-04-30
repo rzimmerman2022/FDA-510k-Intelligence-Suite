@@ -1,4 +1,5 @@
 Option Explicit
+Attribute VB_Name = "ModuleManager"
 
 ' Updated paths to match your actual folder structure
 Private Const SOURCE_FOLDER As String = "C:\FDA\FDA-510k-Intelligence-Suite\src\vba\"
@@ -222,102 +223,164 @@ Cleanup:
 End Sub
 
 '-----------------------------------------------------------
-' Recursively populate dict(VB_Name) = fullPath while
-'  • skipping any path that contains "\_legacy\" or starts with _legacy
-'  • reading internal VB_Name from file
-'  • ignoring subsequent duplicates based on internal VB_Name
+' Populate dict(VB_Name or FileName) = fullPath, skipping _legacy folders
+' Incorporates Unicode reading and fallback to filename if VB_Name attribute is missing.
 '-----------------------------------------------------------
-Private Sub GatherFiles(ByVal startPath As String, ByRef d As Object, ByRef fso As Object)
-    Dim fld As Object, fil As Object, vbName As String, txt As String, p As Long
-    Dim currentFolder As Object ' Folder object
+Private Sub GatherFiles(startPath As String, ByRef moduleDict As Object, ByRef fileSystemObj As Object)
+    ' Constants for file operations
+    Const ForReading As Long = 1
+    Const TriStateFalse As Long = 0      ' Use system default (ANSI/UTF-8) - Not used here
+    Const TriStateTrue As Long = -1      ' Force Unicode (UTF-16)
+    Const TriStateUseDefault As Long = -2 ' Use system default (ANSI/UTF-8) - Not used here
+    Const ReadChunkSize As Long = 2048   ' Initial bytes to read for VB_Name attribute
 
-    ' 1) Skip everything under _legacy at any depth
-    If InStr(1, LCase$(startPath), "\_legacy\", vbTextCompare) > 0 _
-       Or LCase$(fso.GetFileName(startPath)) Like "_legacy*" Then
-        Debug.Print "GatherFiles: Skipping folder path containing _legacy: " & startPath
+    Dim folderName As String
+    Dim folderObj As Object
+    Dim fileObj As Object
+    Dim subFolderObj As Object
+    Dim fileText As String
+    Dim moduleName As String
+    Dim attributePos As Long
+    Dim textStream As Object
+
+    ' --- 1. Skip this folder if its own name starts with _legacy ---
+    ' Use Trim$ to handle potential trailing spaces if startPath comes from user input/config
+    folderName = LCase$(fileSystemObj.GetFileName(Trim$(startPath)))
+    If folderName Like "_legacy*" Then
+        Debug.Print "GatherFiles: SKIP folder (legacy name): " & startPath
         Exit Sub
     End If
 
-    ' Check if folder exists before trying to access it
-    If Not fso.FolderExists(startPath) Then
-        Debug.Print "GatherFiles: Folder not found: " & startPath
+    ' --- Check if folder exists before proceeding ---
+    If Not fileSystemObj.FolderExists(startPath) Then
+        Debug.Print "GatherFiles: ERROR - Folder not found: " & startPath
         Exit Sub
     End If
-    Set currentFolder = fso.GetFolder(startPath)
 
-    ' 2) Scan files in the current folder
-    On Error Resume Next ' Handle potential permission errors accessing files
-    For Each fil In currentFolder.Files
+    Debug.Print "GatherFiles: Scanning folder: " & startPath
+
+    ' --- Get the folder object once ---
+    On Error Resume Next ' Handle potential permission errors getting folder object
+    Set folderObj = fileSystemObj.GetFolder(startPath)
+    If Err.Number <> 0 Then
+        Debug.Print "GatherFiles: ERROR - Cannot access folder: " & startPath & " - " & Err.Description
+        Err.Clear
+        Exit Sub ' Cannot proceed with this folder
+    End If
+    On Error GoTo 0 ' Restore default error handling
+
+    ' --- 2. Scan files in the current folder ---
+    On Error Resume Next ' Handle potential errors enumerating files
+    For Each fileObj In folderObj.Files
         If Err.Number <> 0 Then
-            Debug.Print "GatherFiles: Error accessing files in " & startPath & ": " & Err.Description
+            Debug.Print "GatherFiles: ERROR enumerating files in " & startPath & ": " & Err.Description
             Err.Clear
-            Exit For ' Stop processing files in this folder on error
+            Exit For ' Stop trying to process files in this folder if enumeration fails
         End If
 
-        Select Case LCase$(fso.GetExtensionName(fil.Name))
+        Select Case LCase$(fileSystemObj.GetExtensionName(fileObj.Name))
             Case "bas", "cls", "frm"
-                ' Read first ~2 KB to find Attribute VB_Name
-                Dim ts As Object ' TextStream
-                vbName = "" ' Reset for each file
-                Set ts = fso.OpenTextFile(fil.Path, 1) ' 1 = ForReading
-                If Err.Number <> 0 Then
-                    Debug.Print "GatherFiles: Error opening file " & fil.Path & ": " & Err.Description
-                    Err.Clear
-                Else
-                    If Not ts.AtEndOfStream Then
-                        txt = ts.Read(2048) ' Read chunk
-                        ts.Close
-                        p = InStr(1, txt, "Attribute VB_Name", vbTextCompare)
-                        If p > 0 Then
-                            ' Extract the name, handle quotes and whitespace
-                            vbName = Split(Mid$(txt, p), "=")(1) ' Get part after '='
-                            vbName = Split(vbName, vbCrLf)(0)    ' Get first line
-                            vbName = Trim$(vbName)
-                            If Left$(vbName, 1) = """" And Right$(vbName, 1) = """" Then
-                                vbName = Mid$(vbName, 2, Len(vbName) - 2) ' Remove quotes
-                            End If
+                moduleName = "" ' Reset for each file
+                attributePos = 0
+                Set textStream = Nothing ' Reset text stream object
 
-                            ' Add to dictionary if the VB_Name is not already present
-                            If Len(vbName) > 0 Then
-                                If Not d.Exists(vbName) Then
-                                    d.Add vbName, fil.Path
-                                    Debug.Print "GatherFiles: Added [" & vbName & "] -> " & fil.Path
-                                Else
-                                    Debug.Print "GatherFiles: Duplicate VB_Name [" & vbName & "] found, ignoring " & fil.Path & " (Already have: " & d(vbName) & ")"
-                                End If
-                            Else
-                                Debug.Print "GatherFiles: Could not extract valid VB_Name from " & fil.Path
-                            End If
-                        Else
-                             Debug.Print "GatherFiles: Attribute VB_Name not found in first 2KB of " & fil.Path
+                ' --- Attempt to open file as Unicode ---
+                On Error Resume Next ' Handle file open errors (e.g., locked file)
+                Set textStream = fileSystemObj.OpenTextFile(fileObj.Path, ForReading, False, TriStateTrue)
+                If Err.Number <> 0 Or textStream Is Nothing Then
+                    Debug.Print "GatherFiles: ERROR opening file (Unicode): " & fileObj.Path & " - " & Err.Description
+                    Err.Clear
+                    GoTo NextFile ' Skip this file
+                End If
+                On Error GoTo 0
+
+                ' --- Read initial chunk to find VB_Name ---
+                If Not textStream.AtEndOfStream Then
+                    fileText = textStream.Read(ReadChunkSize)
+                    attributePos = InStr(1, fileText, "Attribute VB_Name", vbTextCompare)
+                Else
+                    Debug.Print "GatherFiles: WARNING - File is empty: " & fileObj.Path
+                    textStream.Close ' Close the empty file stream
+                    GoTo NextFile ' Skip empty file
+                End If
+
+                ' --- If not found in first chunk, read the whole file (if not already at end) ---
+                If attributePos = 0 And Not textStream.AtEndOfStream Then
+                    textStream.Close ' Close the initial stream
+                    Debug.Print "GatherFiles: VB_Name not in first " & ReadChunkSize & " bytes, reading full file: " & fileObj.Path
+                    Set textStream = fileSystemObj.OpenTextFile(fileObj.Path, ForReading, False, TriStateTrue) ' Re-open
+                    If Not textStream Is Nothing Then
+                        If Not textStream.AtEndOfStream Then
+                            fileText = textStream.ReadAll
+                            attributePos = InStr(1, fileText, "Attribute VB_Name", vbTextCompare)
                         End If
                     Else
-                         ts.Close ' Close even if empty
-                         Debug.Print "GatherFiles: File is empty " & fil.Path
+                         Debug.Print "GatherFiles: ERROR re-opening full file (Unicode): " & fileObj.Path
+                         GoTo NextFile ' Skip if re-open fails
                     End If
-                    Set ts = Nothing
+                End If
+
+                ' --- Close the stream ---
+                If Not textStream Is Nothing Then
+                    textStream.Close
+                    Set textStream = Nothing
+                End If
+
+                ' --- Extract or Fallback ---
+                If attributePos > 0 Then
+                    ' Extract VB_Name from the attribute line
+                    On Error Resume Next ' Handle potential errors splitting/parsing the line
+                    moduleName = Split(Split(Mid$(fileText, attributePos), "=")(1), vbCrLf)(0)
+                    moduleName = Trim$(Replace(moduleName, """", "")) ' Clean quotes and spaces
+                    If Err.Number <> 0 Or Len(moduleName) = 0 Then
+                        Debug.Print "GatherFiles: ERROR parsing VB_Name attribute in: " & fileObj.Path & " - Falling back to filename."
+                        Err.Clear
+                        moduleName = fileSystemObj.GetBaseName(fileObj.Name) ' Fallback on parse error
+                    Else
+                        Debug.Print "GatherFiles: Found VB_Name attribute: [" & moduleName & "] in " & fileObj.Path
+                    End If
+                    On Error GoTo 0
+                Else
+                    ' Attribute not found - Log error and skip this file (enforces best practice)
+                    Debug.Print "GatherFiles: ERROR - Attribute VB_Name not found in " & fileObj.Path & ". Skipping file. Ensure it was exported correctly."
+                    moduleName = "" ' Ensure moduleName is empty so it's not added
+                End If
+
+                ' --- Add to dictionary ONLY if a valid VB_Name was extracted ---
+                If Len(moduleName) > 0 Then
+                    If Not moduleDict.Exists(moduleName) Then
+                        moduleDict.Add moduleName, fileObj.Path
+                        Debug.Print "GatherFiles: ADDED [" & moduleName & "] -> " & fileObj.Path
+                    Else
+                        Debug.Print "GatherFiles: DUPLICATE VB_Name [" & moduleName & "] found. Ignoring " & fileObj.Path & " (Keeping existing: " & moduleDict(moduleName) & ")"
+                    End If
+                ' Else: If moduleName is empty (attribute missing or parse error), do nothing - file is skipped.
                 End If
         End Select
-    Next fil
-    On Error GoTo 0 ' Restore error handling
+NextFile:
+        ' Loop cleanup (optional, good practice)
+        Set textStream = Nothing
+    Next fileObj
+    On Error GoTo 0 ' Restore default error handling
 
-    ' 3) Recurse into subfolders
-    On Error Resume Next ' Handle potential permission errors accessing subfolders
-    For Each fld In currentFolder.SubFolders
+    ' --- 3. Recurse into sub-folders ---
+    On Error Resume Next ' Handle potential errors enumerating subfolders
+    For Each subFolderObj In folderObj.SubFolders
          If Err.Number <> 0 Then
-            Debug.Print "GatherFiles: Error accessing subfolders in " & startPath & ": " & Err.Description
-            Err.Clear
-            Exit For ' Stop processing subfolders on error
-        End If
-        ' Recursive call - pass the subfolder's path
-        GatherFiles fld.Path, d, fso ' Pass dictionary and fso
-    Next fld
-    On Error GoTo 0 ' Restore error handling
+             Debug.Print "GatherFiles: ERROR enumerating subfolders in " & startPath & ": " & Err.Description
+             Err.Clear
+             Exit For ' Stop trying to process subfolders if enumeration fails
+         End If
+        ' Recursive call - passes the same dictionary and FSO objects down
+        GatherFiles subFolderObj.Path, moduleDict, fileSystemObj
+    Next subFolderObj
+    On Error GoTo 0 ' Restore default error handling
 
-    ' Cleanup for this level
-    Set currentFolder = Nothing
-    Set fld = Nothing
-    Set fil = Nothing
+    ' --- Cleanup objects for this level ---
+    Set fileObj = Nothing
+    Set subFolderObj = Nothing
+    Set folderObj = Nothing
+    Set textStream = Nothing ' Ensure cleanup even if errors occurred mid-loop
 End Sub
 
 

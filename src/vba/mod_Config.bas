@@ -4,6 +4,7 @@
 ' Maintainer: [Your Name/Team]
 ' =====================================
 Option Explicit
+Attribute VB_Name = "mod_Config"
 
 ' --- Essential Configuration ---
 ' *** IMPORTANT: SET YOUR WINDOWS USERNAME FOR MAINTAINER FEATURES (e.g., OpenAI, DebugMode) ***

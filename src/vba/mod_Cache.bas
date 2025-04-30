@@ -6,6 +6,7 @@
 ' Dependencies: mod_Logger, mod_DebugTraceHelpers, mod_Config, mod_Utils (for IsMaintainerUser)
 ' =====================================
 Option Explicit
+Attribute VB_Name = "mod_Cache"
 
 ' Module-level variable for the in-memory cache
 Private dictCache As Object ' Scripting.Dictionary: Key=CompanyName, Value=RecapText

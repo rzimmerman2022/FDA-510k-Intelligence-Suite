@@ -6,6 +6,7 @@
 ' Dependencies: mod_Logger, mod_DebugTraceHelpers
 ' =====================================
 Option Explicit
+Attribute VB_Name = "mod_DataIO"
 
 Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
     ' Purpose: Refreshes the Power Query associated with the target table using QueryTable object.

@@ -1,5 +1,6 @@
 '========================  mod_Logger  =====================================
 Option Explicit
+Attribute VB_Name = "mod_Logger"
 
 ' --- Constants ---
 Private Const LOG_SHEET As String = "RunLog"   ' Name of the hidden log sheet

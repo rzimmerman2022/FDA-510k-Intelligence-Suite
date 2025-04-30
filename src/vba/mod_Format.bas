@@ -6,6 +6,7 @@
 ' Dependencies: mod_Logger, mod_DebugTraceHelpers, mod_Schema, mod_Config
 ' =====================================
 Option Explicit
+Attribute VB_Name = "mod_Format"
 
 Public Function AddScoreColumnsIfNeeded(tbl As ListObject) As Boolean
     ' Purpose: Adds the necessary scoring output columns to the table if they don't exist.
