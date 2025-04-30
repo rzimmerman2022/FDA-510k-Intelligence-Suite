@@ -38,5 +38,5 @@ RunLog.txt
 # Example/Sample outputs that shouldn't be committed directly
 # samples/sample_output.xlsx # Keep if it's a clean TEMPLATE, ignore if it contains run data
 
-# VBA Legacy/Backup files (renamed during refactoring)
-src/vba/*-legacy.*
+# VBA Legacy/Backup files (moved to _legacy directory)
+src/vba/_legacy/
