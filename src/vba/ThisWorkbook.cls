@@ -3,7 +3,9 @@ Option Explicit
 ' ==========================================================================
 ' ===                  THISWORKBOOK MODULE CODE                          ===
 ' ==========================================================================
-' --- This code runs automatically when the workbook is opened ---
+' This code handles the automatic workbook events:
+' - Workbook_Open: Entry point for the automated 510(k) processing
+' - Workbook_BeforeClose: Performs cleanup operations like trimming the log
 
 Private Sub Workbook_Open()
     ' Purpose: Entry point for the automated 510(k) processing.
@@ -33,18 +35,46 @@ Private Sub Workbook_Open()
     Debug.Print Time & " - Workbook_Open: Calling RefreshPowerQuery..."
 
     ' Call the refresh function from the other module.
-    ' Assumes PQ_CONNECTION_NAME is a Public Const in mod_510k_Processor
-    ' Assumes RefreshPowerQuery is a Public Function in mod_510k_Processor or this module
-    If mod_510k_Processor.RefreshPowerQuery(mod_510k_Processor.PQ_CONNECTION_NAME) Then
-         Debug.Print Time & " - Power Query refresh step completed."
-    Else
-         Debug.Print Time & " - Power Query refresh failed or was skipped. See previous logs."
-         ' Critical Decision: Should we stop if refresh fails?
-         MsgBox "Warning: Failed to refresh data from the FDA source." & vbCrLf & _
-                "Processing will continue with existing data, which may be outdated.", vbExclamation, "Data Refresh Issue"
-         ' Uncomment the next line to completely stop if refresh fails:
-         ' GoTo OpenCleanExit
+    ' Assumes RefreshPowerQuery is a Public Function in mod_510k_Processor
+    ' It now requires the ListObject (table) as input.
+    Dim wsData As Worksheet
+    Dim tblData As ListObject
+    Dim refreshSuccess As Boolean: refreshSuccess = False
+    Const DATA_SHEET_NAME_LOCAL As String = "CurrentMonthData" ' Use local literal
+
+    On Error Resume Next ' Handle potential errors getting sheet/table
+    ' Use the local literal sheet name to avoid cross-module reference issues
+    Set wsData = ThisWorkbook.Sheets(DATA_SHEET_NAME_LOCAL)
+    If Not wsData Is Nothing Then
+        Set tblData = wsData.ListObjects(1) ' Assuming the first table is the target
     End If
+    On Error GoTo OpenErrorHandler ' Restore error handler
+
+    If tblData Is Nothing Then
+        ' Use the local literal here too for the error message
+        Debug.Print Time & " - ERROR: Could not find data table on sheet '" & DATA_SHEET_NAME_LOCAL & "' during Workbook_Open refresh."
+        MsgBox "Error: Could not find the data table on sheet '" & DATA_SHEET_NAME_LOCAL & "'." & vbCrLf & _
+               "Cannot refresh Power Query.", vbCritical, "Table Not Found"
+        ' Decide if you want to stop here or continue without refresh
+        ' GoTo OpenCleanExit ' Option to stop
+    Else
+        ' Call RefreshPowerQuery with the table object
+        refreshSuccess = mod_510k_Processor.RefreshPowerQuery(tblData)
+        If refreshSuccess Then
+            Debug.Print Time & " - Power Query refresh step completed for table '" & tblData.Name & "'."
+        Else
+            Debug.Print Time & " - Power Query refresh failed or was skipped for table '" & tblData.Name & "'. See previous logs."
+            ' Critical Decision: Should we stop if refresh fails?
+            MsgBox "Warning: Failed to refresh data from the FDA source." & vbCrLf & _
+                   "Processing will continue with existing data, which may be outdated.", vbExclamation, "Data Refresh Issue"
+            ' Uncomment the next line to completely stop if refresh fails:
+            ' GoTo OpenCleanExit
+        End If
+    End If
+
+    ' Clean up objects used just for refresh call
+    Set tblData = Nothing
+    Set wsData = Nothing
 
     ' --- 4. Call the Main Processing Sub (Scoring, Formatting, Archiving) ---
     '    This sub contains the Day Guard logic.
@@ -83,4 +113,26 @@ OpenErrorHandler:
     Resume OpenCleanExit
 
 End Sub ' End of Workbook_Open
+
+Private Sub Workbook_BeforeClose(Cancel As Boolean)
+    ' Purpose: Performs any necessary cleanup operations before the workbook is closed
+    '          1. Trims the RunLog sheet to prevent excessive growth over time
+    '          2. [Optional] Could add other cleanup tasks here as needed
+    
+    On Error Resume Next ' Handle potential errors gracefully - we don't want to prevent closing
+    
+    ' --- 1. Trim the Log Sheet ---
+    mod_Logger.TrimRunLog 5000 ' Keep the most recent 5000 rows in the log, delete older entries
+    
+    ' --- 2. [Optional] Any other cleanup tasks could be added here ---
+    ' Examples:
+    ' - Ensure all sheets are properly archived
+    ' - Save user preferences/settings
+    ' - Clean up temp files/data
+    
+    On Error GoTo 0 ' Restore normal error handling
+    
+    ' Always let workbook close by not setting Cancel = True
+End Sub
+
 
