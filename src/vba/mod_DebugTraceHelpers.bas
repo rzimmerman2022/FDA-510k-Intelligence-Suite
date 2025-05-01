@@ -40,6 +40,8 @@
 ' ----------- --------------- ----------------------------------------------
 ' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
 ' 2025-04-29  [Unknown]       - Initial adaptation/creation of the module.
+' 2025-04-30  Cline (AI)      - Added Debug.Print statements to TraceEvt entry and
+'                               error handler to diagnose lack of sheet output.
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
@@ -49,7 +51,7 @@ Attribute VB_Name = "mod_DebugTraceHelpers"
 ' *** Set TRACE_ENABLED to True for detailed logging, False for production ***
 Public Const TRACE_ENABLED As Boolean = True    '<<< MASTER DEBUG SWITCH
 ' *** Set TRACE_LEVEL to control verbosity (higher number = more detail) ***
-Public Const TRACE_LEVEL  As Long    = 3        '0=Off, 1=Error, 2=Warn, 3=Info, 4=Detail, 5=Spam/Loop
+Public Const TRACE_LEVEL  As Long    = 4        '0=Off, 1=Error, 2=Warn, 3=Info, 4=Detail, 5=Spam/Loop ' Changed to lvlDET
 
 '--  target worksheet (created on-the-fly) --------------------------------
 Private Const TRACE_SHEET As String = "DebugTrace"
@@ -78,6 +80,8 @@ Public Sub TraceEvt(ByVal lvl As eTraceLvl, _
                     ByVal proc As String, _
                     ByVal msg As String, _
            Optional ByVal detail As String = vbNullString)
+
+    Debug.Print Now & " - TraceEvt: Entered. Level=" & lvl & ", Proc=" & proc & ", Msg=" & msg ' <<< DEBUG PRINT ADDED
 
     If Not TRACE_ENABLED Then Exit Sub
     If lvl = lvlOFF Or lvl > TRACE_LEVEL Then Exit Sub ' Check against master level
@@ -129,6 +133,7 @@ Public Sub TraceEvt(ByVal lvl As eTraceLvl, _
     Exit Sub
 
 TraceErrorHandler:
+    Debug.Print Now & " - TraceEvt: ERROR HANDLER REACHED. Err=" & Err.Number & ", Desc=" & Err.Description ' <<< DEBUG PRINT ADDED
     ' Basic error handler to prevent log failures from crashing the main code
     Debug.Print Now & " - ERROR in TraceEvt (mod_DebugTraceHelpers): " & Err.Number & " - " & Err.Description
     ' Optionally, try to write a simplified error to the sheet if possible

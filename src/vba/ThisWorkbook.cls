@@ -39,6 +39,9 @@
 ' 2025-04-30  Cline (AI)      - Reverted: Restored explicit module qualifier (mod_DataIO.)
 '                               for RefreshPowerQuery call.
 ' 2025-04-30  Cline (AI)      - Added call to mod_DataIO.TestCall for debugging compile error.
+' 2025-04-30  Cline (AI)      - Removed Debug.Print statements previously added for tracing.
+' 2025-04-30  Cline (AI)      - Added call to mod_Logger.FlushLogBuf in Workbook_BeforeClose
+'                               to ensure logs are written before closing/trimming.
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
@@ -72,7 +75,6 @@ Private Sub Workbook_Open()
 
     ' --- 3. Always Refresh Power Query Data First ---
     Application.StatusBar = "Refreshing FDA data (Step 1/2)..."
-    Debug.Print Time & " - Workbook_Open: Calling RefreshPowerQuery..."
 
     ' Call the refresh function from the other module.
     ' Assumes RefreshPowerQuery is a Public Function in mod_510k_Processor
@@ -132,7 +134,6 @@ Private Sub Workbook_Open()
     ' --- 4. Call the Main Processing Sub (Scoring, Formatting, Archiving) ---
     '    This sub contains the Day Guard logic.
     Application.StatusBar = "Processing leads and finalizing sheet (Step 2/2)..."
-    Debug.Print Time & " - Workbook_Open: Calling ProcessMonthly510k..."
 
     Call mod_510k_Processor.ProcessMonthly510k ' Call the main routine in the other module
 
@@ -173,11 +174,15 @@ Private Sub Workbook_BeforeClose(Cancel As Boolean)
     '          2. [Optional] Could add other cleanup tasks here as needed
     
     On Error Resume Next ' Handle potential errors gracefully - we don't want to prevent closing
-    
-    ' --- 1. Trim the Log Sheet ---
+
+    ' --- 1. Flush Log Buffer ---
+    ' Ensure any remaining logs in memory are written to the sheet before closing/trimming.
+    mod_Logger.FlushLogBuf
+
+    ' --- 2. Trim the Log Sheet ---
     mod_Logger.TrimRunLog 5000 ' Keep the most recent 5000 rows in the log, delete older entries
-    
-    ' --- 2. [Optional] Any other cleanup tasks could be added here ---
+
+    ' --- 3. [Optional] Any other cleanup tasks could be added here ---
     ' Examples:
     ' - Ensure all sheets are properly archived
     ' - Save user preferences/settings

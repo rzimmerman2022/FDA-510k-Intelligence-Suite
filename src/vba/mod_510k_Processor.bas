@@ -50,6 +50,12 @@
 '                               module qualifier 'mod_Config.' in initial logging calls.
 ' 2025-04-30  Cline (AI)      - Added FlushLogBuf call in ProcessErrorHandler to ensure
 '                               log buffer is written even when errors occur.
+' 2025-04-30  Cline (AI)      - Added robust connection refresh fallback if table missing.
+'                             - Tightened error handler to capture Err details immediately.
+' 2025-04-30  Cline (AI)      - Moved errNum/errDesc declaration to top of sub for scope.
+' 2025-04-30  Cline (AI)      - Added detailed Debug.Print statements around table checks
+'                               and fallback logic for enhanced tracing.
+' 2025-04-30  Cline (AI)      - Removed all temporary Debug.Print statements.
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 '--- Code for Module: mod_510k_Processor ---
@@ -111,6 +117,10 @@ Public Sub ProcessMonthly510k()
     Dim mustArchive As Boolean ' Flag indicating if archiving is needed
     Dim originalCalcBeforeSave As Boolean ' For performance tweak
     Dim originalCalcState As XlCalculation ' For performance tweak
+    ' --- Error variables declared at procedure level ---
+    Dim errNum  As Long
+    Dim errDesc As String
+    ' -------------------------------------------------
 
     ' --- Error Handling Setup ---
     On Error GoTo ProcessErrorHandler
@@ -131,7 +141,9 @@ Public Sub ProcessMonthly510k()
     TraceEvt lvlINFO, "ProcessMonthly510k", "Process Start", "Version=" & mod_Config.VERSION_INFO ' Qualified constant; Use enum
 
     ' --- Get Worksheet Objects Safely (Moved to mod_Utils) ---
-    If Not mod_Utils.GetWorksheets(wsData, wsWeights, wsCache) Then GoTo CleanExit ' Exit handled by EnsureUIOn
+    If Not mod_Utils.GetWorksheets(wsData, wsWeights, wsCache) Then
+        GoTo CleanExit ' Exit handled by EnsureUIOn
+    End If
 
     ' --- Ensure Data Table Exists (Guard Rail) ---
     On Error Resume Next ' Check for table existence
@@ -163,6 +175,53 @@ Public Sub ProcessMonthly510k()
         On Error GoTo ProcessErrorHandler ' Restore error handler
     End If
     ' --- End Table Guard Rail ---
+
+    '--- FINAL FALLBACK: build the table from any query that targets CurrentMonthData ---
+    If tblData Is Nothing Then
+        Dim pq As WorkbookConnection, sql As String ' Changed conn to pq for clarity
+        Dim foundConnection As Boolean: foundConnection = False
+        For Each pq In ThisWorkbook.Connections
+            ' Check if it's an OLEDB connection (typical for Power Query)
+            If TypeName(pq.OLEDBConnection) = "OLEDBConnection" Then
+                On Error Resume Next ' Handle connections without CommandText
+                sql = pq.OLEDBConnection.CommandText
+                Dim cmdTextErr As Long: cmdTextErr = Err.Number ' Capture error
+                On Error GoTo ProcessErrorHandler ' Restore handler
+
+                ' Check if the command text (often contains sheet name) targets our sheet
+                If cmdTextErr = 0 And InStr(1, sql, DATA_SHEET_NAME, vbTextCompare) > 0 Then
+                    LogEvt "DataTable", lgWARN, _
+                           "Table not found; attempting to recreate it by refreshing connection: " & pq.Name
+                    TraceEvt lvlWARN, "ProcessMonthly510k", _
+                             "Table missing – refreshing connection", "Conn=" & pq.Name
+
+                    pq.Refresh                         ' loads data to sheet, should recreate ListObject
+                    foundConnection = True
+                    Exit For ' Found and refreshed the relevant connection
+                End If
+            End If
+        Next pq
+
+        ' Try setting the table object again after potential refresh
+        If foundConnection Then
+            On Error Resume Next
+            Set tblData = wsData.ListObjects(1)           ' try again
+            On Error GoTo ProcessErrorHandler
+        End If
+    End If
+    ' --- End Robust Fallback ---
+
+    ' --- Final check if table exists after all attempts (with improved message) ---
+    If tblData Is Nothing Then
+        Dim msg As String: msg = "No list-object found on '" & DATA_SHEET_NAME & _
+                         "' and none could be recreated automatically via connection refresh."
+        LogEvt "DataTable", lgERROR, msg
+        TraceEvt lvlERROR, "ProcessMonthly510k", msg
+        errDesc = msg        ' push a useful message into the handler (errDesc declared at top)
+        GoTo ProcessErrorHandler ' Critical failure if table still missing
+    End If
+    ' --- End Final Check ---
+
 
     ' --- Determine Target Month & Check Guard Conditions ---
     startMonth = DateSerial(Year(DateAdd("m", -1, Date)), Month(DateAdd("m", -1, Date)), 1)
@@ -403,8 +462,12 @@ Public Sub ProcessMonthly510k()
     GoTo CleanExit ' Skip error handler if successful
 
 ProcessErrorHandler:
-    Dim errDesc As String: errDesc = Err.Description
-    Dim errNum As Long: errNum = Err.Number
+    ' --- Capture error details IMMEDIATELY ---
+    ' Dim errNum  As Long:  errNum  = Err.Number ' Moved declaration to top
+    ' Dim errDesc As String: errDesc = Err.Description ' Moved declaration to top
+    errNum = Err.Number ' Capture current error number
+    If errDesc = "" Then errDesc = Err.Description ' Capture description if not already set by fallback
+    ' --- End Capture ---
     LogEvt "ProcessError", lgERROR, "Unhandled Error #" & errNum & " in ProcessMonthly510k: " & errDesc ' Use lgERROR instead of lgCRITICAL
     TraceEvt lvlERROR, "ProcessMonthly510k", "FATAL ERROR", "Err=" & errNum & " - " & errDesc ' Use lvlERROR instead of lvlFATAL
     ' --- Explicitly flush log buffer on error ---
@@ -418,6 +481,11 @@ ProcessErrorHandler:
 CleanExit:
     LogEvt "ProcessEnd", lgINFO, "ProcessMonthly510k Ended", "Duration=" & Format(Timer - startTime, "0.00") & "s"
     TraceEvt lvlINFO, "ProcessMonthly510k", "Process End", "Duration=" & Format(Timer - startTime, "0.00") & "s"
+    ' --- Explicitly flush log buffer on successful completion ---
+    On Error Resume Next ' Prevent error in Flush from causing issues here
+    FlushLogBuf
+    On Error GoTo 0 ' Restore default error handling
+    ' --- End Flush ---
     Call mod_Utils.EnsureUIOn(originalCalcState) ' Use mod_Utils, restore original calc state
     ' --- Clean up local objects ---
     Set wsData = Nothing
@@ -438,3 +506,28 @@ End Sub
 ' --- mod_Weights, mod_Cache, mod_Score, mod_Format, mod_Archive,       ---
 ' --- mod_Utils). This module now only contains the main orchestration   ---
 ' --- subroutine `ProcessMonthly510k`.                                   ---
+
+</final_file_content>
+
+IMPORTANT: For any future changes to this file, use the final_file_content shown above as your reference. This content reflects the current state of the file, including any auto-formatting (e.g., if you used single quotes but the formatter converted them to double quotes). Always base your SEARCH/REPLACE operations on this final version to ensure accuracy.<environment_details>
+# VSCode Visible Files
+src/vba/mod_510k_Processor.bas
+
+# VSCode Open Tabs
+../../Users/Ryan/AppData/Local/Programs/Microsoft VS Code/Untitled-1
+src/vba/mod_Logger.bas
+src/vba/ThisWorkbook.cls
+src/vba/mod_DataIO.bas
+src/vba/mod_Format.bas
+src/vba/mod_510k_Processor.bas
+commit_message.txt
+
+# Current Time
+4/30/2025, 6:21:21 PM (America/Phoenix, UTC-7:00)
+
+# Context Window Usage
+261,775 / 1,048.576K tokens used (25%)
+
+# Current Mode
+ACT MODE
+</environment_details>

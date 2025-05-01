@@ -14,9 +14,9 @@
 '               containing queries are copied (e.g., during archiving).
 '
 ' Key Functions:
-'               - RefreshPowerQuery: Refreshes the specified ListObject's
-'                 associated QueryTable synchronously and attempts to disable
-'                 background refresh afterward.
+'               - RefreshPowerQuery: Refreshes the target table's associated
+'                 QueryTable synchronously. Duplicate columns handled later.
+'               - ClearExistingTable: Clears range and deletes a ListObject (Currently Unused).
 '               - SheetExists: Checks if a sheet with a given name exists.
 '               - CleanupDuplicateConnections: Attempts to identify and delete
 '                 duplicate Power Query connections based on naming patterns,
@@ -37,6 +37,23 @@
 ' 2025-04-30  Cline (AI)      - Made EnableRefresh check more explicit in RefreshPowerQuery
 '                               and removed On Error Resume Next around setting it True.
 ' 2025-04-30  Cline (AI)      - Added simple TestCall function for debugging compile error.
+' 2025-04-30  Cline (AI)      - Added ClearExistingTable sub and call it in RefreshPowerQuery
+'                               to prevent duplicate columns from header collisions.
+' 2025-04-30  Cline (AI)      - Modified ClearExistingTable to clear contents/headers only,
+'                               NOT delete the ListObject, to fix "Object required" error.
+'                             - Simplified RefreshPowerQuery to use the existing QueryTable
+'                               object associated with the non-deleted ListObject.
+' 2025-04-30  Cline (AI)      - Renamed ClearExistingTable to ClearExistingTableRows.
+'                             - Modified ClearExistingTableRows to delete DataBodyRange only.
+'                             - Updated RefreshPowerQuery to call ClearExistingTableRows.
+' 2025-04-30  Cline (AI)      - Changed ClearExistingTableRows to use .ClearContents
+'                               instead of .Delete to fix error 1004 on refresh.
+' 2025-04-30  Cline (AI)      - Reverted ClearExistingTableRows back to ClearExistingTable
+'                               (including .Delete) and modified RefreshPowerQuery to
+'                               refresh via WorkbookConnection object instead of QueryTable.
+' 2025-04-30  Cline (AI)      - Removed call to ClearExistingTable from RefreshPowerQuery
+'                               to avoid pre-refresh table manipulation errors. Duplicate
+'                               columns will be handled post-refresh by mod_Format.
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
@@ -47,9 +64,45 @@ Public Function TestCall() As Boolean
     TestCall = True
 End Function
 
+Public Sub ClearExistingTable(lo As ListObject)
+    ' Purpose: Clears all data, formatting, and headers from a ListObject's range
+    '          and then deletes the ListObject itself. Prepares for connection refresh.
+    '          NOTE: This is currently unused as pre-refresh deletion caused errors.
+    Const PROC_NAME As String = "ClearExistingTable"
+    If lo Is Nothing Then
+        LogEvt PROC_NAME, lgWARN, "Target table object is Nothing. Cannot clear."
+        TraceEvt lvlWARN, PROC_NAME, "Target table object is Nothing"
+        Exit Sub
+    End If
+
+    On Error GoTo ClearErrorHandler
+    LogEvt PROC_NAME, lgINFO, "Attempting to clear range and delete table: " & lo.Name
+    TraceEvt lvlINFO, PROC_NAME, "Start clear range/delete", "Table=" & lo.Name
+
+    ' Use With block for clarity
+    With lo
+        ' Clear contents, formats, headers etc. from the entire range
+        .Range.Clear
+        ' Delete the ListObject itself
+        .Delete ' Reinstated delete
+    End With
+
+    LogEvt PROC_NAME, lgINFO, "Successfully cleared range and deleted table."
+    TraceEvt lvlINFO, PROC_NAME, "Clear range/delete successful"
+    Exit Sub
+
+ClearErrorHandler:
+    Dim errDesc As String: errDesc = Err.Description
+    Dim errNum As Long: errNum = Err.Number
+    LogEvt PROC_NAME, lgERROR, "Error clearing range/deleting table '" & lo.Name & "'. Error #" & errNum & ": " & errDesc
+    TraceEvt lvlERROR, PROC_NAME, "Error clearing range/deleting table", "Table='" & lo.Name & "', Err=" & errNum & " - " & errDesc
+    ' Optionally re-raise or handle differently, but for now just log
+End Sub
+
+
 Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
     ' Purpose: Refreshes the Power Query associated with the target table using QueryTable object.
-    '          Includes disabling background refresh post-query.
+    '          Duplicate columns may occur and should be handled post-refresh by mod_Format.
     Dim qt As QueryTable
     Const PROC_NAME As String = "RefreshPowerQuery"
     RefreshPowerQuery = False ' Default to False
@@ -61,69 +114,72 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
     End If
 
     On Error GoTo RefreshErrorHandler
-    LogEvt PROC_NAME, lgINFO, "Attempting QueryTable refresh for: " & targetTable.Name
-    TraceEvt lvlINFO, PROC_NAME, "Start refresh", "Table='" & targetTable.Name & "'"
 
+    ' --- Get the QueryTable directly from the ListObject ---
+    LogEvt PROC_NAME, lgINFO, "Attempting to get QueryTable from ListObject: " & targetTable.Name
+    TraceEvt lvlINFO, PROC_NAME, "Getting QueryTable from ListObject", "Table=" & targetTable.Name
     Set qt = targetTable.QueryTable
+
     If qt Is Nothing Then
         LogEvt PROC_NAME, lgERROR, "Could not find QueryTable associated with table '" & targetTable.Name & "'."
         TraceEvt lvlERROR, PROC_NAME, "QueryTable object is Nothing", "Table='" & targetTable.Name & "'"
-        MsgBox "Error: Could not find QueryTable associated with table '" & targetTable.Name & "'.", vbCritical, "Refresh Error"
+        MsgBox "Error: Could not find the Power Query connection associated with table '" & targetTable.Name & "'. Cannot refresh.", vbCritical, "Refresh Error"
         Exit Function ' Exit, cannot refresh
     End If
+    LogEvt PROC_NAME, lgINFO, "Found QueryTable: " & qt.Name
+    TraceEvt lvlINFO, PROC_NAME, "Found QueryTable", "Name=" & qt.Name
 
     ' --- Ensure refresh is enabled BEFORE attempting ---
     If Not qt.EnableRefresh Then
-        LogEvt PROC_NAME, lgWARN, "QueryTable refresh was disabled for '" & targetTable.Name & "'. Attempting to enable.", "Current EnableRefresh=" & qt.EnableRefresh
-        TraceEvt lvlWARN, PROC_NAME, "Refresh was disabled. Attempting enable.", "Table='" & targetTable.Name & "'"
-        ' Removed On Error Resume Next here to catch potential errors setting the property
+        LogEvt PROC_NAME, lgWARN, "QueryTable refresh was disabled for '" & qt.Name & "'. Attempting to enable.", "Current EnableRefresh=" & qt.EnableRefresh
+        TraceEvt lvlWARN, PROC_NAME, "Refresh was disabled. Attempting enable.", "QueryTable='" & qt.Name & "'"
         qt.EnableRefresh = True
-        ' Re-check if it succeeded
         If Not qt.EnableRefresh Then
-             LogEvt PROC_NAME, lgERROR, "Failed to set EnableRefresh=True for table '" & targetTable.Name & "'. Halting refresh attempt."
-             TraceEvt lvlERROR, PROC_NAME, "Failed to set EnableRefresh=True", "Table='" & targetTable.Name & "'"
-             MsgBox "Error: Could not enable refresh for table '" & targetTable.Name & "'.", vbCritical, "Refresh Error"
+             LogEvt PROC_NAME, lgERROR, "Failed to set EnableRefresh=True for QueryTable '" & qt.Name & "'. Halting refresh attempt."
+             TraceEvt lvlERROR, PROC_NAME, "Failed to set EnableRefresh=True", "QueryTable='" & qt.Name & "'"
+             MsgBox "Error: Could not enable refresh for QueryTable '" & qt.Name & "'.", vbCritical, "Refresh Error"
              Exit Function ' Cannot proceed
         Else
-             LogEvt PROC_NAME, lgINFO, "Successfully set EnableRefresh=True for table '" & targetTable.Name & "'."
-             TraceEvt lvlINFO, PROC_NAME, "Successfully set EnableRefresh=True", "Table='" & targetTable.Name & "'"
+             LogEvt PROC_NAME, lgINFO, "Successfully set EnableRefresh=True for QueryTable '" & qt.Name & "'."
+             TraceEvt lvlINFO, PROC_NAME, "Successfully set EnableRefresh=True", "QueryTable='" & qt.Name & "'"
         End If
     Else
-        LogEvt PROC_NAME, lgDETAIL, "QueryTable refresh already enabled for '" & targetTable.Name & "'.", "Current EnableRefresh=" & qt.EnableRefresh
-        TraceEvt lvlDET, PROC_NAME, "Refresh already enabled", "Table='" & targetTable.Name & "'"
+        LogEvt PROC_NAME, lgDETAIL, "QueryTable refresh already enabled for '" & qt.Name & "'.", "Current EnableRefresh=" & qt.EnableRefresh
+        TraceEvt lvlDET, PROC_NAME, "Refresh already enabled", "QueryTable='" & qt.Name & "'"
     End If
 
     ' Refresh synchronously
     qt.BackgroundQuery = False ' Ensure background query is off for synchronous refresh
+    LogEvt PROC_NAME, lgINFO, "Attempting synchronous refresh for QueryTable: " & qt.Name
+    TraceEvt lvlINFO, PROC_NAME, "Starting synchronous refresh", "QueryTable=" & qt.Name
     qt.Refresh
 
-    ' --- Lock refresh settings post-query (per review suggestion) ---
+    ' --- Lock refresh settings post-query ---
     On Error Resume Next ' Best effort to disable these
     qt.BackgroundQuery = False
     qt.EnableRefresh = False
     If Err.Number <> 0 Then
-         LogEvt PROC_NAME, lgWARN, "Could not disable BackgroundQuery/EnableRefresh after refresh for table '" & targetTable.Name & "'. Error: " & Err.Description
-         TraceEvt lvlWARN, PROC_NAME, "Failed to set BackgroundQuery=False / EnableRefresh=False", "Table='" & targetTable.Name & "', Err=" & Err.Description
+         LogEvt PROC_NAME, lgWARN, "Could not disable BackgroundQuery/EnableRefresh after refresh for QueryTable '" & qt.Name & "'. Error: " & Err.Description
+         TraceEvt lvlWARN, PROC_NAME, "Failed to set BackgroundQuery=False / EnableRefresh=False", "QueryTable='" & qt.Name & "', Err=" & Err.Description
          Err.Clear
     Else
-         LogEvt PROC_NAME, lgDETAIL, "Set BackgroundQuery=False and EnableRefresh=False post-refresh for table '" & targetTable.Name & "'."
-         TraceEvt lvlDET, PROC_NAME, "Set BackgroundQuery=False / EnableRefresh=False post-refresh", "Table='" & targetTable.Name & "'"
+         LogEvt PROC_NAME, lgDETAIL, "Set BackgroundQuery=False and EnableRefresh=False post-refresh for QueryTable '" & qt.Name & "'."
+         TraceEvt lvlDET, PROC_NAME, "Set BackgroundQuery=False / EnableRefresh=False post-refresh", "QueryTable='" & qt.Name & "'"
     End If
-    On Error GoTo RefreshErrorHandler ' Restore main handler for this sub
-    ' --- End Lock ---
+    On Error GoTo RefreshErrorHandler ' Restore main handler
 
     RefreshPowerQuery = True ' If refresh completes without error
-    LogEvt PROC_NAME, lgINFO, "QueryTable refresh completed successfully for: " & targetTable.Name
-    TraceEvt lvlINFO, PROC_NAME, "Refresh successful", "Table='" & targetTable.Name & "'"
+    LogEvt PROC_NAME, lgINFO, "QueryTable refresh completed successfully for: " & qt.Name
+    TraceEvt lvlINFO, PROC_NAME, "Refresh successful", "QueryTable='" & qt.Name & "'"
     Exit Function
 
 RefreshErrorHandler:
     Dim errDesc As String: errDesc = Err.Description
     Dim errNum As Long: errNum = Err.Number
     RefreshPowerQuery = False ' Ensure False is returned
-    LogEvt PROC_NAME, lgERROR, "Error during QueryTable refresh for '" & targetTable.Name & "'. Error #" & errNum & ": " & errDesc
-    TraceEvt lvlERROR, PROC_NAME, "Error during QueryTable refresh", "Table='" & targetTable.Name & "', Err=" & errNum & " - " & errDesc
-    MsgBox "QueryTable refresh failed for table '" & targetTable.Name & "': " & vbCrLf & errDesc, vbExclamation, "Refresh Error"
+    LogEvt PROC_NAME, lgERROR, "Error during QueryTable refresh process. Error #" & errNum & ": " & errDesc
+    TraceEvt lvlERROR, PROC_NAME, "Error during QueryTable refresh process", "Err=" & errNum & " - " & errDesc
+    MsgBox "QueryTable refresh failed: " & vbCrLf & errDesc, vbExclamation, "Refresh Error"
     ' Exit Function ' Exit implicitly after error handler
 End Function
 
@@ -227,7 +283,7 @@ Public Function ArrayToTable(dataArr As Variant, targetTable As ListObject) As B
     ' --- Resize table if necessary (optional, but safer) ---
     ' Clear existing data first to avoid issues if new array is smaller
     If targetTable.ListRows.Count > 0 Then
-        targetTable.DataBodyRange.ClearContents
+        targetTable.DataBodyRange.ClearContents ' Changed from .Delete to .ClearContents
     End If
     ' Resize based on array dimensions (if table allows resizing)
     ' Note: Resizing might fail if table is linked externally in certain ways.

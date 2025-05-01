@@ -1,4 +1,42 @@
-'========================  mod_Logger  =====================================
+' ==========================================================================
+' Module      : mod_Logger
+' Author      : Unknown
+' Date        : Unknown
+' Maintainer  : Cline (AI Assistant)
+' Version     : See mod_Config.VERSION_INFO
+' ==========================================================================
+' Description : Provides a buffered logging system to write diagnostic and
+'               event information to a hidden Excel sheet ('RunLog').
+'               Includes different log levels and automatic session tracking.
+'
+' Key Functions/Procedures:
+'               - LogEvt: Adds a log entry to the in-memory buffer.
+'               - FlushLogBuf: Writes the entire buffer to the 'RunLog' sheet.
+'               - TrimRunLog: Deletes older rows from the 'RunLog' sheet.
+'
+' Private Helpers:
+'               - InitLogger: Initializes the logger state for a new session.
+'               - EnsureLogSheet: Finds or creates the 'RunLog' sheet.
+'               - DebugModeOn: Checks if detailed logging should be enabled.
+'
+' Dependencies: - mod_Config (for VERSION_INFO)
+'               - mod_Utils (for IsMaintainerUser)
+'               - Scripting Runtime (for GUID generation via Scriptlet.TypeLib)
+'               - Assumes 'RunLog' sheet name, specific column structure.
+'
+' Revision History:
+' --------------------------------------------------------------------------
+' Date        Author          Description
+' ----------- --------------- ----------------------------------------------
+' 2025-04-30  Cline (AI)      - Added Debug.Print statements throughout for tracing.
+' 2025-04-30  Cline (AI)      - Added more detailed Debug.Print statements inside InitLogger,
+'                               FlushLogBuf, EnsureLogSheet, and before InitLogger call
+'                               in LogEvt to diagnose missing RunLog output.
+' 2025-04-30  Cline (AI)      - Added comprehensive On Error GoTo handler at the start
+'                               of InitLogger to catch potential early failures.
+' 2025-04-30  Cline (AI)      - Removed all temporary Debug.Print statements.
+' [Previous dates/authors/changes unknown]
+' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_Logger"
 
@@ -44,7 +82,11 @@ Public Sub LogEvt(stepTxt As String, level As LogLevel, msg As String, _
     If level = LogLevel.lgDETAIL And Not DebugModeOn() Then Exit Sub ' Use LogLevel Enum
 
     ' Initialize logger (get RunID, create buffer) on first call per session
-    If logBuf.runID = "" Then InitLogger
+    If logBuf.runID = "" Then
+        InitLogger
+        ' Check if InitLogger failed silently (e.g., runID still empty or logger closed)
+        If logBuf.runID = "" Or logBuf.isClosed Then Exit Sub
+    End If
 
     ' Increment row pointer
     logBuf.used = logBuf.used + 1
@@ -53,7 +95,6 @@ Public Sub LogEvt(stepTxt As String, level As LogLevel, msg As String, _
     If logBuf.used > UBound(logBuf.data, 1) Then
         ' Grow buffer by BUF_CHUNK rows, preserving existing data
         ReDim Preserve logBuf.data(1 To UBound(logBuf.data, 1) + BUF_CHUNK, 1 To LOG_COL_COUNT)
-        Debug.Print Time & " - Log Buffer expanded." ' Optional debug message
     End If
 
     ' Write log data to the next available row in the buffer array
@@ -71,11 +112,8 @@ Public Sub FlushLogBuf()
     ' Purpose: Writes the entire contents of the in-memory log buffer to the hidden RunLog sheet.
     '          Should be called once at the very end of the main process or before closing.
 
-    ' Don't try to flush if already closed
-    If logBuf.isClosed Then Exit Sub
-
-    ' Exit if buffer is empty (nothing to write)
-    If logBuf.used = 0 Then Exit Sub
+    ' Don't try to flush if already closed or buffer empty
+    If logBuf.isClosed Or logBuf.used = 0 Then Exit Sub
 
     Dim ws As Worksheet
     Dim nextRow As Long
@@ -96,16 +134,15 @@ Public Sub FlushLogBuf()
         Application.Index(logBuf.data, Evaluate("ROW(1:" & logBuf.used & ")"), _
                            Evaluate("COLUMN(1:" & LOG_COL_COUNT & ")"))
     writeSuccess = (Err.Number = 0)
+    Dim writeErrNum As Long: writeErrNum = Err.Number ' Capture error number immediately
+    Dim writeErrDesc As String: writeErrDesc = Err.Description ' Capture error desc immediately
     On Error GoTo FlushError ' Restore primary error handler
 
-    If writeSuccess Then
-        Debug.Print Time & " - Flushed " & logBuf.used & " log entries to sheet '" & LOG_SHEET & "'."
-    Else
-        Debug.Print Time & " - FAILED to write log buffer to sheet '" & LOG_SHEET & "'. Error: " & Err.Description
+    If Not writeSuccess Then
         ' Attempt to write a simplified error message directly to the sheet
         On Error Resume Next
         ws.Cells(nextRow, 1).Resize(1, LOG_COL_COUNT).value = _
-            Array(logBuf.runID, Now, Environ$("USERNAME"), "FlushError", "ERROR", "Failed to write log buffer via Application.Index", Err.Description)
+            Array(logBuf.runID, Now, Environ$("USERNAME"), "FlushError", "ERROR", "Failed to write log buffer via Application.Index", writeErrDesc)
         On Error GoTo 0
     End If
 
@@ -119,11 +156,10 @@ ResetBufferAndExit:
     Exit Sub ' Normal exit
 
 FlushError:
+     Dim errNum As Long: errNum = Err.Number ' Capture error info
      Dim errDesc As String: errDesc = Err.Description ' Capture error info
-     Debug.Print Time & " - ERROR during FlushLogBuf processing: " & errDesc
      ' Set isClosed flag on fatal error during flush
      logBuf.isClosed = True
-     Debug.Print Time & " - Logger marked as closed due to fatal flush error."
      ' Optionally attempt to reset buffer even on error
      Resume ResetBufferAndExit
 End Sub
@@ -133,10 +169,7 @@ Public Sub TrimRunLog(Optional keepRows As Long = 5000)
     ' Inputs:  keepRows - The approximate number of most recent log entries to keep.
 
     ' Don't try to trim if logger closed
-    If logBuf.isClosed Then
-        Debug.Print Time & " - Log Trim skipped as logger is marked closed."
-        Exit Sub
-    End If
+    If logBuf.isClosed Then Exit Sub
 
     Const LOG_SHEET As String = "RunLog" ' Ensure constant is defined or accessible
     Dim ws As Worksheet
@@ -160,27 +193,35 @@ Public Sub TrimRunLog(Optional keepRows As Long = 5000)
         Application.ScreenUpdating = False ' Prevent screen flicker during delete
         ws.Rows("2:" & firstRowToDelete - 1).Delete
         Application.ScreenUpdating = True
-        Debug.Print Time & " - Trimmed log sheet. Deleted rows 2 through " & firstRowToDelete - 1 & "."
-    Else
-        Debug.Print Time & " - Log sheet trim skipped (Rows <= KeepRows)."
     End If
     Exit Sub
 
 TrimError:
      Application.ScreenUpdating = True ' Ensure screen updating is re-enabled
-     Debug.Print Time & " - Error trimming log sheet: " & Err.Description
+     ' Log error? Maybe not if Trim is non-critical
 End Sub
 
 
 '------------------------- Internal Helper Functions -------------------------
 
 Private Sub InitLogger()
+    ' --- ADDED: Comprehensive Error Handler ---
+    On Error GoTo InitError
+    ' ------------------------------------------
+
     ' Purpose: Initializes the log buffer for a new session. Gets RunID, allocates initial array size.
+    Dim guidErrNum As Long
+    Dim guidErrDesc As String
+
     On Error Resume Next ' In case CreateObject fails
     logBuf.runID = CreateObject("Scriptlet.TypeLib").GUID ' Generate unique session ID
-    If Err.Number <> 0 Then logBuf.runID = "ErrorGUID_" & Format(Now, "yyyymmddhhmmss") ' Fallback ID
-    Err.Clear
-    On Error GoTo 0
+    guidErrNum = Err.Number ' Capture error immediately
+    guidErrDesc = Err.Description ' Capture error immediately
+    On Error GoTo InitError ' Restore main error handler for this sub
+
+    If guidErrNum <> 0 Then
+        logBuf.runID = "ErrorGUID_" & Format(Now, "yyyymmddhhmmss") ' Fallback ID
+    End If
 
     ' Pre-allocate the first chunk of the buffer array
     ReDim logBuf.data(1 To BUF_CHUNK, 1 To LOG_COL_COUNT)
@@ -190,31 +231,55 @@ Private Sub InitLogger()
     ' Log the start of the session using the new Enum member
     ' Note: This call itself uses LogEvt, so it must be correct.
     ' Assuming mod_Config.VERSION_INFO is accessible
-    On Error Resume Next ' Avoid error if VERSION_INFO isn't ready yet
+    On Error Resume Next ' Avoid error if VERSION_INFO isn't ready yet or LogEvt fails early
     LogEvt "Logger", LogLevel.lgINFO, "Session started.", "Version=" & mod_Config.VERSION_INFO ' Corrected module reference
-    On Error GoTo 0
+    On Error GoTo InitError ' Restore main error handler
+
+    Exit Sub ' Normal Exit
+
+InitError: ' --- ADDED: Error Handler ---
+    Dim errNum As Long: errNum = Err.Number
+    Dim errDesc As String: errDesc = Err.Description
+    ' Attempt to set a RunID so subsequent LogEvt calls don't keep trying InitLogger
+    If logBuf.runID = "" Then logBuf.runID = "INIT_FAILED_" & Format(Now, "yyyymmddhhmmss")
+    logBuf.isClosed = True ' Mark logger as closed to prevent further attempts
+    ' Do not Resume Next, let the error propagate or exit cleanly
 End Sub
 
 Private Function EnsureLogSheet() As Worksheet
     ' Purpose: Finds the log sheet or creates it if it doesn't exist.
     ' Returns: Worksheet object for the log sheet, or Nothing on failure.
     Dim ws As Worksheet
+    Dim findErrNum As Long
+    Dim findErrDesc As String
+
     On Error Resume Next ' Temporarily ignore error if sheet doesn't exist
     Set ws = ThisWorkbook.Worksheets(LOG_SHEET)
+    findErrNum = Err.Number ' Capture error immediately
+    findErrDesc = Err.Description ' Capture error immediately
     On Error GoTo 0 ' Restore default error handling
 
     If ws Is Nothing Then
         ' Sheet doesn't exist, try to create it
+        Dim createErrNum As Long
+        Dim createErrDesc As String
         On Error Resume Next ' Handle errors during sheet creation/naming
         Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
-        If Err.Number = 0 Then
+        createErrNum = Err.Number ' Capture error immediately
+        createErrDesc = Err.Description ' Capture error immediately
+
+        If createErrNum = 0 Then
             ws.Name = LOG_SHEET
-            ws.Visible = xlSheetVeryHidden
-            ws.Range("A1").Resize(1, LOG_COL_COUNT).value = Array("RunID", "Timestamp", "User", "Step", "Level", "Message", "Extra")
-            ws.Range("A1").Resize(1, LOG_COL_COUNT).Font.Bold = True
-            Debug.Print Time & " - Created hidden log sheet: '" & LOG_SHEET & "'"
+            createErrNum = Err.Number ' Capture error immediately after rename
+            createErrDesc = Err.Description ' Capture error immediately after rename
+            If createErrNum = 0 Then
+                 ws.Visible = xlSheetVeryHidden
+                 ws.Range("A1").Resize(1, LOG_COL_COUNT).value = Array("RunID", "Timestamp", "User", "Step", "Level", "Message", "Extra")
+                 ws.Range("A1").Resize(1, LOG_COL_COUNT).Font.Bold = True
+            Else
+                 Set ws = Nothing ' Return Nothing on failure
+            End If
         Else
-            Debug.Print Time & " - ERROR: Could not create log sheet '" & LOG_SHEET & "'. Error: " & Err.Description
             Set ws = Nothing ' Return Nothing on failure
         End If
         On Error GoTo 0 ' Restore default error handling
@@ -249,7 +314,6 @@ Private Function DebugModeOn() As Boolean
         If debugValue = "true" Then DebugModeOn = True
     Else
         ' Named range doesn't exist - log a warning? (Maybe not needed if Maintainer check passed)
-        Debug.Print Time & " - Warning: Named Range 'DebugMode' not found. DETAIL logging relies on Maintainer status only."
         Err.Clear
     End If
     On Error GoTo 0 ' Restore default error handling

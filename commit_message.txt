@@ -1,26 +1,30 @@
-feat: Resolve runtime errors and VBA compile issues
+feat: Debug Power Query refresh and logging systems
 
-Detailed Changes:
+This commit encapsulates a significant debugging session focused on resolving issues with the Power Query refresh process, duplicate column generation, and the VBA logging mechanisms.
 
-1.  **Fix Power Query Refresh Error (`mod_DataIO.bas`):**
-    *   Resolved runtime error "QueryTable refresh failed for table 'pgGet510kData': Refresh disabled."
-    *   Modified `RefreshPowerQuery` function to explicitly check if `qt.EnableRefresh` is `False` before attempting to set it to `True`.
-    *   Removed `On Error Resume Next` around the initial `qt.EnableRefresh = True` assignment to ensure any errors setting this property are caught.
-    *   Added detailed logging for enabling/disabling refresh status.
+**Logging System (`mod_Logger` / `RunLog`):**
 
-2.  **Fix RunLog Update on Error (`mod_510k_Processor.bas`):**
-    *   Addressed issue where `RunLog` sheet was not updated if an error occurred early in the process (e.g., during Power Query refresh).
-    *   Added an explicit call to `mod_Logger.FlushLogBuf` within the `ProcessErrorHandler` block to ensure the log buffer is written to the sheet even when errors cause premature termination.
+*   Identified that `FlushLogBuf` was not called on successful completion (`CleanExit` in `mod_510k_Processor`) or before workbook close (`Workbook_BeforeClose`).
+*   Added explicit calls to `FlushLogBuf` in both `mod_510k_Processor` (within `CleanExit` and `ProcessErrorHandler`) and `ThisWorkbook.cls` (within `Workbook_BeforeClose`) to ensure logs are written reliably.
+*   Temporarily added and then removed `Debug.Print` statements within `mod_Logger` to diagnose initial failures.
 
-3.  **Fix VBA Compile Error (`ThisWorkbook.cls`, `mod_DataIO.bas`):**
-    *   Addressed persistent compile error "Method or data member not found" or "Sub or Function not defined" when calling `mod_DataIO.RefreshPowerQuery` from `ThisWorkbook.Workbook_Open`.
-    *   Troubleshooting steps included:
-        *   Verifying function signature and `Public` declaration.
-        *   Attempting call without module qualifier (resulted in "Sub or Function not defined").
-        *   Restoring explicit module qualifier (`mod_DataIO.`).
-        *   Checking VBA references (found no `MISSING` references, required ones seemed present).
-        *   Adding a `TestCall` function to `mod_DataIO` and calling it from `ThisWorkbook` to isolate the issue. (This step involved correcting tool use errors where the function wasn't initially added correctly via `write_to_file`).
-    *   The root cause remained elusive but seemed related to VBA's internal state or reference resolution specifically within the `ThisWorkbook` context for this function call. The final state leaves the explicit call `mod_DataIO.RefreshPowerQuery` in place, assuming manual compilation or environment state resolved the issue outside of direct code changes for the call itself.
+**Power Query Refresh & Duplicate Columns (`mod_DataIO`, `mod_Format`, `mod_510k_Processor`):**
 
-4.  **Update Module Headers (Revision History):**
-    *   Added revision history entries in `mod_DataIO.bas`, `mod_510k_Processor.bas`, and `ThisWorkbook.cls` to document the specific fixes implemented *in this commit* (Power Query refresh, RunLog flush, compile error troubleshooting).
+*   Diagnosed errors (424 "Object required", 1004 "Application-defined...") occurring during `RefreshPowerQuery`.
+*   Attempted several strategies to prevent duplicate columns and refresh errors:
+    *   Deleting the `ListObject` entirely before refresh (`ClearExistingTable` with `.Delete`). Failed with error 424.
+    *   Clearing `DataBodyRange` contents (`ClearExistingTableRows` with `.ClearContents`). Failed with error 1004.
+    *   Reverting to deleting the `ListObject` and refreshing via `WorkbookConnection`. Failed with error 424.
+*   Reverted `RefreshPowerQuery` in `mod_DataIO` to perform a direct refresh without pre-clearing the table, accepting potential duplicate columns.
+*   Modified `DeleteDuplicateColumns` in `mod_Format` to use pattern matching (`Like "* [0-9]"`) to remove duplicate columns *after* refresh and processing.
+*   Added a robust fallback mechanism in `mod_510k_Processor` to attempt recreating a missing table by refreshing the underlying `WorkbookConnection`.
+*   Improved error handling in `mod_510k_Processor` to capture `Err.Number` and `Err.Description` immediately within the error handler.
+*   Fixed compile errors related to variable scope (`errDesc`) and incorrect `End If` placement introduced during modifications.
+
+**Tracing System (`mod_DebugTraceHelpers` / `DebugTrace`):**
+
+*   Enabled detailed tracing (`TRACE_ENABLED = True`, `TRACE_LEVEL = lvlDET`) to aid diagnostics.
+*   Added temporary `Debug.Print` statements within `TraceEvt` to investigate why the `DebugTrace` sheet was not being populated despite tracing being enabled.
+
+**Current State:**
+The `RunLog` system should now be functional. The Power Query refresh process still fails, likely related to the table state or connection handling. Detailed tracing via `mod_DebugTraceHelpers` is enabled but was not producing output, prompting the addition of `Debug.Print` statements within it for further diagnosis (next step is to analyze this output).

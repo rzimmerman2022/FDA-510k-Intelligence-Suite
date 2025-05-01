@@ -51,6 +51,10 @@
 ' 2025-04-30  Cline (AI)      - Commented out FreezeHeaderAndFirstColumns call in ApplyAll.
 ' 2025-04-30  Cline (AI)      - Added final AutoFit call in ApplyAll.
 ' 2025-04-30  Cline (AI)      - Corrected column order in ReorganizeColumns per user request. Ensured pane freezing remains disabled.
+' 2025-04-30  Cline (AI)      - Added logging to ApplyAll steps, removed error suppression on final AutoFit.
+' 2025-04-30  Cline (AI)      - Added more detailed logging within DeleteDuplicateColumns to diagnose deletion failures.
+' 2025-04-30  Cline (AI)      - Modified DeleteDuplicateColumns to use pattern matching
+'                               (Like "* [0-9]") instead of a hardcoded list.
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
@@ -109,24 +113,28 @@ Public Function ApplyAll(tbl As ListObject, wsData As Worksheet) As Boolean
     TraceEvt lvlINFO, PROC_NAME, "Start formatting sequence", "Table=" & tbl.Name
 
     ' --- Call individual formatting routines ---
+    LogEvt PROC_NAME, lgDETAIL, "Calling DeleteDuplicateColumns..."
     Call DeleteDuplicateColumns(tbl) ' Delete known duplicates first
+    LogEvt PROC_NAME, lgDETAIL, "Calling ApplyNumberFormats..."
     Call ApplyNumberFormats(tbl)
+    LogEvt PROC_NAME, lgDETAIL, "Calling FormatTableLook..."
     Call FormatTableLook(tbl) ' Includes initial AutoFit
+    LogEvt PROC_NAME, lgDETAIL, "Calling FormatCategoryColors..."
     Call FormatCategoryColors(tbl) ' Apply colors based on Category column name
+    LogEvt PROC_NAME, lgDETAIL, "Calling CreateShortNamesAndComments..."
     Call CreateShortNamesAndComments(tbl) ' Placeholder
+    LogEvt PROC_NAME, lgDETAIL, "Calling ReorganizeColumns..."
     Call ReorganizeColumns(tbl) ' Move columns to desired order
+    LogEvt PROC_NAME, lgDETAIL, "Calling SortDataTable..."
     Call SortDataTable(tbl)
     ' Call FreezeHeaderAndFirstColumns(wsData) ' Commented out as requested
 
     ' --- Final Autofit after all changes ---
-    On Error Resume Next ' Be lenient with final autofit
+    ' Removed On Error Resume Next to expose potential errors
+    LogEvt PROC_NAME, lgDETAIL, "Attempting final AutoFit..."
     tbl.Range.Columns.AutoFit
-    If Err.Number <> 0 Then
-        LogEvt PROC_NAME, lgWARN, "Error during final AutoFit: " & Err.Description, "Table=" & tbl.Name
-        TraceEvt lvlWARN, PROC_NAME, "Error during final AutoFit", "Table=" & tbl.Name & ", Err=" & Err.Description
-        Err.Clear
-    End If
-    On Error GoTo ApplyAllError ' Restore handler
+    LogEvt PROC_NAME, lgDETAIL, "Final AutoFit completed."
+    ' On Error GoTo ApplyAllError ' Error handler already active
 
     ApplyAll = True ' Success
     LogEvt PROC_NAME, lgINFO, "Formatting sequence completed successfully for table: " & tbl.Name
@@ -147,40 +155,44 @@ End Function
 ' ==========================================================================
 
 Private Sub DeleteDuplicateColumns(tbl As ListObject)
-    ' Purpose: Deletes specific known duplicate columns that might appear.
+    ' Purpose: Deletes duplicate columns identified by a pattern (ending in space + number).
     Const PROC_NAME As String = "mod_Format.DeleteDuplicateColumns"
-    Dim colsToDelete As Variant: colsToDelete = Array("Category 2", "FDA Link 2", "Score Percent 2", "Final_Score 2") ' Add others if needed
-    Dim colName As Variant
     Dim lc As ListColumn
-    Dim i As Integer
+    Dim i As Long ' Use Long for column index
 
-    LogEvt PROC_NAME, lgDETAIL, "Checking for duplicate columns to delete...", "Table=" & tbl.Name
-    TraceEvt lvlDET, PROC_NAME, "Start checking for duplicate columns", "Table=" & tbl.Name
+    LogEvt PROC_NAME, lgDETAIL, "Checking for pattern-based duplicate columns to delete...", "Table=" & tbl.Name & ", Pattern='* [0-9]'"
+    TraceEvt lvlDET, PROC_NAME, "Start checking for pattern-based duplicate columns", "Table=" & tbl.Name
 
     ' Loop backwards when deleting columns to avoid index issues
     For i = tbl.ListColumns.Count To 1 Step -1
         Set lc = tbl.ListColumns(i)
-        For Each colName In colsToDelete
-            If lc.Name = colName Then
-                On Error Resume Next ' Handle error during delete
-                lc.Delete
-                If Err.Number <> 0 Then
-                    LogEvt PROC_NAME, lgWARN, "Could not delete duplicate column: " & colName, "Table=" & tbl.Name & ", Err=" & Err.Description
-                    TraceEvt lvlWARN, PROC_NAME, "Could not delete duplicate column", "Table=" & tbl.Name & ", Column=" & colName & ", Err=" & Err.Description
-                    Err.Clear
-                Else
-                    LogEvt PROC_NAME, lgINFO, "Deleted duplicate column: " & colName, "Table=" & tbl.Name
-                    TraceEvt lvlINFO, PROC_NAME, "Deleted duplicate column", "Table=" & tbl.Name & ", Column=" & colName
-                End If
-                On Error GoTo 0 ' Restore default error handling
-                Exit For ' Move to next column index once a match is found and deleted
+
+        ' Check if column name matches the pattern (e.g., "Column Name 2")
+        If lc.Name Like "* [0-9]" Then
+            LogEvt PROC_NAME, lgDETAIL, "Pattern match found. Attempting to delete duplicate column: '" & lc.Name & "'", "Index=" & i
+            TraceEvt lvlDET, PROC_NAME, "Pattern match found, attempting delete", "Column=" & lc.Name & ", Index=" & i
+
+            Dim errNum As Long, errDesc As String
+            On Error Resume Next ' Handle error during delete
+            lc.Delete
+            errNum = Err.Number ' Capture error info IMMEDIATELY
+            errDesc = Err.Description
+            On Error GoTo 0 ' Restore default error handling NOW
+
+            If errNum <> 0 Then
+                LogEvt PROC_NAME, lgWARN, "FAILED to delete duplicate column: '" & lc.Name & "'", "Table=" & tbl.Name & ", ErrNo=" & errNum & ", ErrDesc=" & errDesc
+                TraceEvt lvlWARN, PROC_NAME, "FAILED to delete duplicate column", "Table=" & tbl.Name & ", Column=" & lc.Name & ", ErrNo=" & errNum & ", ErrDesc=" & errDesc
+            Else
+                LogEvt PROC_NAME, lgINFO, "Successfully deleted duplicate column: '" & lc.Name & "'", "Table=" & tbl.Name
+                TraceEvt lvlINFO, PROC_NAME, "Successfully deleted duplicate column", "Table=" & tbl.Name & ", Column=" & lc.Name
             End If
-        Next colName
+            ' No Exit For needed as we check each column index independently
+        End If
         Set lc = Nothing
     Next i
 
-    LogEvt PROC_NAME, lgDETAIL, "Duplicate column check complete.", "Table=" & tbl.Name
-    TraceEvt lvlDET, PROC_NAME, "Duplicate column check complete", "Table=" & tbl.Name
+    LogEvt PROC_NAME, lgDETAIL, "Pattern-based duplicate column check complete.", "Table=" & tbl.Name
+    TraceEvt lvlDET, PROC_NAME, "Pattern-based duplicate column check complete", "Table=" & tbl.Name
 End Sub
 
 
@@ -282,10 +294,14 @@ Private Sub FormatCategoryColors(tbl As ListObject)
     On Error Resume Next ' Check if column exists
     Set catCol = tbl.ListColumns("Category")
     On Error GoTo FormatError ' Restore handler
+
     If catCol Is Nothing Then
-        LogEvt PROC_NAME, lgWARN, "Category column not found. Skipping color formatting.", "Table=" & tbl.Name
-        TraceEvt lvlWARN, PROC_NAME, "Category column not found", "Table=" & tbl.Name
-        Exit Sub
+        LogEvt PROC_NAME, lgWARN, "'Category' column not found. Skipping color formatting.", "Table=" & tbl.Name
+        TraceEvt lvlWARN, PROC_NAME, "'Category' column not found", "Table=" & tbl.Name
+        Exit Sub ' Cannot apply formatting if the target column doesn't exist
+    Else
+        LogEvt PROC_NAME, lgDETAIL, "'Category' column found. Proceeding with color formatting.", "Table=" & tbl.Name
+        TraceEvt lvlDET, PROC_NAME, "'Category' column found", "Table=" & tbl.Name
     End If
 
     Set catRange = catCol.DataBodyRange
@@ -375,7 +391,10 @@ Private Sub ReorganizeColumns(tbl As ListObject)
 
         If Not lc Is Nothing Then
             currentPos = lc.Index
+            LogEvt PROC_NAME, lgDETAIL, "Processing column '" & colName & "'. Current Index=" & currentPos & ", Target Index=" & targetPos
+            TraceEvt lvlDET, PROC_NAME, "Processing column", "Col=" & colName & ", Current=" & currentPos & ", Target=" & targetPos
             If currentPos <> targetPos Then
+                LogEvt PROC_NAME, lgDETAIL, "Attempting to move '" & colName & "' from " & currentPos & " to " & targetPos
                 lc.Range.EntireColumn.Cut
                 tbl.HeaderRowRange.Parent.Columns(targetPos).Insert Shift:=xlToRight
                 Application.CutCopyMode = False ' Clear clipboard
@@ -478,3 +497,14 @@ Private Sub FreezeHeaderAndFirstColumns(ws As Worksheet)
     End If
     On Error GoTo 0 ' Restore default
 End Sub
+
+
+' --- Helper function to check column existence (Added for logging) ---
+Private Function ColumnExists(tbl As ListObject, colName As String) As Boolean
+    Dim lc As ListColumn
+    On Error Resume Next
+    Set lc = tbl.ListColumns(colName)
+    ColumnExists = (Err.Number = 0)
+    On Error GoTo 0
+    Set lc = Nothing
+End Function
