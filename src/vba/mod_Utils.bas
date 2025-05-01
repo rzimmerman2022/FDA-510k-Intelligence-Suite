@@ -60,13 +60,13 @@ Public Function GetWorksheets(ByRef wsData As Worksheet, ByRef wsWeights As Work
 
     If Len(missingSheets) > 0 Then
         LogEvt PROC_NAME, lgERROR, "Required worksheet(s) not found:" & Replace(missingSheets, vbCrLf, ", ")
-        TraceEvt lvlERROR, PROC_NAME, "Required worksheet(s) not found", "Missing=" & Replace(missingSheets, vbCrLf, ", ")
+        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Required worksheet(s) not found", "Missing=" & Replace(missingSheets, vbCrLf, ", ")
         MsgBox "Error: The following required worksheets could not be found:" & missingSheets & vbCrLf & "Please ensure the sheets exist and names match the configuration.", vbCritical, "Missing Worksheets"
         ' Call EnsureUIOn here to prevent leaving the UI in a bad state
         Call EnsureUIOn(xlCalculationAutomatic) ' Restore to automatic calc on critical error
     Else
         LogEvt PROC_NAME, lgDETAIL, "All required worksheets found."
-        TraceEvt lvlDET, PROC_NAME, "All required worksheets found"
+        mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "All required worksheets found"
         GetWorksheets = True ' Success
     End If
 End Function
@@ -87,7 +87,7 @@ Public Sub EnsureUIOn(Optional restoreCalcState As XlCalculation = xlCalculation
     Application.Cursor = xlDefault
     Application.Calculation = restoreCalcState ' Restore original or specified calculation state
     Application.EnableEvents = True
-    TraceEvt lvlDET, PROC_NAME, "UI settings restored", "CalcState=" & restoreCalcState
+    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "UI settings restored", "CalcState=" & restoreCalcState
     On Error GoTo 0
 End Sub
 

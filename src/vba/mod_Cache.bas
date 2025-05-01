@@ -63,7 +63,7 @@ Public Sub LoadCompanyCache(wsCache As Worksheet)
     Dim lastRow As Long, i As Long, cacheData As Variant, loadedCount As Long
     Const PROC_NAME As String = "mod_Cache.LoadCompanyCache" ' Updated PROC_NAME
     Set dictCache = CreateObject("Scripting.Dictionary"): dictCache.CompareMode = vbTextCompare
-    TraceEvt lvlINFO, PROC_NAME, "Loading cache from sheet", "Sheet=" & wsCache.Name
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Loading cache from sheet", "Sheet=" & wsCache.Name
 
     On Error GoTo CacheLoadError ' Use specific handler
 
@@ -92,13 +92,13 @@ Public Sub LoadCompanyCache(wsCache As Worksheet)
 ExitLoadCache:
     loadedCount = dictCache.Count
      LogEvt PROC_NAME, lgINFO, "Loaded " & loadedCount & " items into memory cache."
-     TraceEvt lvlINFO, PROC_NAME, "Cache loading complete", "ItemsLoaded=" & loadedCount
+     mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Cache loading complete", "ItemsLoaded=" & loadedCount
     On Error GoTo 0 ' Ensure normal error handling restored
     Exit Sub
 
 CacheLoadError:
      LogEvt PROC_NAME, lgERROR, "Error reading cache data from sheet: " & Err.Description
-     TraceEvt lvlERROR, PROC_NAME, "Error reading cache data", "Sheet=" & wsCache.Name & ", Err=" & Err.Number & " - " & Err.Description
+     mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error reading cache data", "Sheet=" & wsCache.Name & ", Err=" & Err.Number & " - " & Err.Description
      Err.Clear ' Clear error before resuming
      Resume ExitLoadCache ' Go to cleanup/logging part
 End Sub
@@ -114,7 +114,7 @@ Public Function GetCompanyRecap(companyName As String, useOpenAI As Boolean) As 
     ' Handle invalid input
     If Len(Trim(companyName)) = 0 Then
         LogEvt PROC_NAME, lgWARN, "Invalid (empty) company name passed.", "RowContext=Unknown" ' Use lgWARN
-        TraceEvt lvlWARN, PROC_NAME, "Invalid company name passed", "Name=''"
+        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Invalid company name passed", "Name=''"
         GetCompanyRecap = "Invalid Applicant Name"
         Exit Function
     End If
@@ -123,11 +123,11 @@ Public Function GetCompanyRecap(companyName As String, useOpenAI As Boolean) As 
     If dictCache.Exists(companyName) Then
         finalRecap = dictCache(companyName)
         LogEvt PROC_NAME, lgDETAIL, "Memory Cache HIT.", "Company=" & companyName ' Use lgDETAIL
-        TraceEvt lvlDET, PROC_NAME, "Memory Cache Hit", "Company=" & companyName
+        mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Memory Cache Hit", "Company=" & companyName
     Else
         ' 2. Memory Cache MISS - Try OpenAI (if enabled) or use Default
         LogEvt PROC_NAME, lgDETAIL, "Memory Cache MISS.", "Company=" & companyName ' Use lgDETAIL
-        TraceEvt lvlDET, PROC_NAME, "Memory Cache Miss", "Company=" & companyName
+        mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Memory Cache Miss", "Company=" & companyName
 
         finalRecap = DEFAULT_RECAP_TEXT ' Assume default unless OpenAI succeeds (Requires mod_Config)
 
@@ -140,13 +140,13 @@ Public Function GetCompanyRecap(companyName As String, useOpenAI As Boolean) As 
             ' Update finalRecap only if OpenAI returns a valid, non-error result
             If openAIResult <> "" And Not LCase(openAIResult) Like "error:*" Then
                 finalRecap = openAIResult
-                 TraceEvt lvlINFO, PROC_NAME, "OpenAI SUCCESS, using result.", "Company=" & companyName
+                 mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "OpenAI SUCCESS, using result.", "Company=" & companyName
             Else
-                 TraceEvt IIf(LCase(openAIResult) Like "error:*", lvlERROR, lvlWARN), PROC_NAME, "OpenAI Failed or Skipped, using default.", "Company=" & companyName & ", Result=" & openAIResult
+                 mod_DebugTraceHelpers.TraceEvt IIf(LCase(openAIResult) Like "error:*", lvlERROR, lvlWARN), PROC_NAME, "OpenAI Failed or Skipped, using default.", "Company=" & companyName & ", Result=" & openAIResult
             End If
         Else
              LogEvt PROC_NAME, lgINFO, "OpenAI call skipped (Not Maintainer or disabled).", "Company=" & companyName ' Use lgINFO
-             TraceEvt lvlINFO, PROC_NAME, "OpenAI call skipped", "Company=" & companyName
+             mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "OpenAI call skipped", "Company=" & companyName
         End If
 
         ' 3. Add the result (Default or OpenAI) to the Memory Cache for this run
@@ -154,10 +154,10 @@ Public Function GetCompanyRecap(companyName As String, useOpenAI As Boolean) As 
         dictCache(companyName) = finalRecap
         If Err.Number <> 0 Then
             LogEvt PROC_NAME, lgERROR, "Error adding '" & companyName & "' to memory cache: " & Err.Description ' Use lgERROR
-            TraceEvt lvlERROR, PROC_NAME, "Error adding to memory cache", "Company=" & companyName & ", Err=" & Err.Description
+            mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error adding to memory cache", "Company=" & companyName & ", Err=" & Err.Description
             Err.Clear
         Else
-             TraceEvt lvlDET, PROC_NAME, "Added to memory cache", "Company=" & companyName
+             mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Added to memory cache", "Company=" & companyName
         End If
         On Error GoTo 0 ' Restore default error handling
     End If
@@ -172,13 +172,13 @@ Public Sub SaveCompanyCache(wsCache As Worksheet)
 
     If dictCache Is Nothing Or dictCache.Count = 0 Then
         LogEvt PROC_NAME, lgINFO, "In-memory cache empty, skipping save." ' Use lgINFO
-        TraceEvt lvlINFO, PROC_NAME, "Skipped saving empty cache"
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Skipped saving empty cache"
         Exit Sub
     End If
 
     On Error GoTo CacheSaveError
     saveCount = dictCache.Count
-    TraceEvt lvlINFO, PROC_NAME, "Saving cache to sheet", "Sheet=" & wsCache.Name & ", Items=" & saveCount
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Saving cache to sheet", "Sheet=" & wsCache.Name & ", Items=" & saveCount
     ReDim outputArr(1 To saveCount, 1 To 3) ' CompanyName, RecapText, LastUpdated
 
     ' Populate the output array
@@ -211,7 +211,7 @@ Public Sub SaveCompanyCache(wsCache As Worksheet)
         End If
     End With
     LogEvt PROC_NAME, lgINFO, "Saved " & saveCount & " items to cache sheet." ' Use lgINFO
-    TraceEvt lvlINFO, PROC_NAME, "Cache save complete", "ItemsSaved=" & saveCount
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Cache save complete", "ItemsSaved=" & saveCount
 
 CacheSaveExit: ' Label for normal exit and error exit cleanup
     ' Restore application settings
@@ -221,7 +221,7 @@ CacheSaveExit: ' Label for normal exit and error exit cleanup
 
 CacheSaveError:
      LogEvt PROC_NAME, lgERROR, "Error saving cache to sheet '" & wsCache.Name & "': " & Err.Description ' Use lgERROR
-     TraceEvt lvlERROR, PROC_NAME, "Error saving cache", "Sheet=" & wsCache.Name & ", Err=" & Err.Number & " - " & Err.Description
+     mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error saving cache", "Sheet=" & wsCache.Name & ", Err=" & Err.Number & " - " & Err.Description
     MsgBox "Error saving company cache to sheet '" & wsCache.Name & "': " & Err.Description, vbExclamation, "Cache Save Error"
     Resume CacheSaveExit ' Attempt to restore settings even after error
 End Sub
@@ -238,7 +238,7 @@ Private Function GetCompanyRecapOpenAI(companyName As String) As String
     ' Assumes IsMaintainerUser is available (e.g., in mod_Utils or mod_Config)
     If Not IsMaintainerUser() Then ' Requires mod_Utils or similar
          LogEvt PROC_NAME, lgINFO, "Skipped OpenAI Call: Not Maintainer User.", "Company=" & companyName ' Use lgINFO
-         TraceEvt lvlINFO, PROC_NAME, "Skipped: Not Maintainer" , "Company=" & companyName
+         mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Skipped: Not Maintainer" , "Company=" & companyName
         Exit Function ' Should not happen if called correctly, but safe
     End If
 
@@ -247,7 +247,7 @@ Private Function GetCompanyRecapOpenAI(companyName As String) As String
     If apiKey = "" Then
         ' GetAPIKey function should have logged the reason
         GetCompanyRecapOpenAI = "Error: API Key Not Configured" ' Return error string
-        TraceEvt lvlERROR, PROC_NAME, "Skipped: API Key Not Found/Configured", "Company=" & companyName
+        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Skipped: API Key Not Found/Configured", "Company=" & companyName
         Exit Function
     End If
 
@@ -270,7 +270,7 @@ Private Function GetCompanyRecapOpenAI(companyName As String) As String
 
     ' Send Request
     LogEvt PROC_NAME, lgDETAIL, "Sending request...", "Company=" & companyName & ", Model=" & modelName ' Use lgDETAIL
-    TraceEvt lvlDET, PROC_NAME, "Sending request...", "Company=" & companyName & ", Model=" & modelName
+    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Sending request...", "Company=" & companyName & ", Model=" & modelName
     Set http = CreateObject("MSXML2.ServerXMLHTTP.6.0")
     http.Open "POST", url, False ' Synchronous call
     http.setTimeouts OPENAI_TIMEOUT_MS, OPENAI_TIMEOUT_MS, OPENAI_TIMEOUT_MS, OPENAI_TIMEOUT_MS ' Assumes constant is available from mod_Config
@@ -280,7 +280,7 @@ Private Function GetCompanyRecapOpenAI(companyName As String) As String
 
     ' Process Response
     LogEvt PROC_NAME, lgDETAIL, "Response Received.", "Company=" & companyName & ", Status=" & http.Status ' Use lgDETAIL
-    TraceEvt lvlDET, PROC_NAME, "Response Received", "Company=" & companyName & ", Status=" & http.Status
+    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Response Received", "Company=" & companyName & ", Status=" & http.Status
 
     If http.Status = 200 Then
         jsonResponse = http.responseText
@@ -297,34 +297,34 @@ Private Function GetCompanyRecapOpenAI(companyName As String) As String
                     result = Mid$(jsonResponse, contentStart, contentEnd - contentStart)
                     result = JsonUnescape(result) ' Unescape special chars
                     LogEvt PROC_NAME, lgINFO, "OpenAI SUCCESS.", "Company=" & companyName ' Use lgINFO
-                    TraceEvt lvlINFO, PROC_NAME, "OpenAI SUCCESS", "Company=" & companyName
+                    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "OpenAI SUCCESS", "Company=" & companyName
                 Else
                      result = "Error: Parse Fail (End Quote)"
                      LogEvt PROC_NAME, lgERROR, result, "Company=" & companyName & ", ResponseStart=" & Left(jsonResponse, 500) ' Use lgERROR
-                     TraceEvt lvlERROR, PROC_NAME, "Parse Fail (End Quote)", "Company=" & companyName & ", ResponseStart=" & Left(jsonResponse, 100)
+                     mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Parse Fail (End Quote)", "Company=" & companyName & ", ResponseStart=" & Left(jsonResponse, 100)
                 End If
             Else
                 ' Content tag not found, check if it's an error object from OpenAI
                 If InStr(1, jsonResponse, """error""", vbTextCompare) > 0 Then
                      result = "Error: API returned error object."
                      LogEvt PROC_NAME, lgERROR, result, "Company=" & companyName & ", Response=" & Left(jsonResponse, 500) ' Use lgERROR
-                     TraceEvt lvlERROR, PROC_NAME, "API returned error object", "Company=" & companyName & ", ResponseStart=" & Left(jsonResponse, 100)
+                     mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "API returned error object", "Company=" & companyName & ", ResponseStart=" & Left(jsonResponse, 100)
                 Else
                      result = "Error: Parse Fail (Start Tag)"
                      LogEvt PROC_NAME, lgERROR, result, "Company=" & companyName & ", Response=" & Left(jsonResponse, 500) ' Use lgERROR
-                     TraceEvt lvlERROR, PROC_NAME, "Parse Fail (Start Tag)", "Company=" & companyName & ", ResponseStart=" & Left(jsonResponse, 100)
+                     mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Parse Fail (Start Tag)", "Company=" & companyName & ", ResponseStart=" & Left(jsonResponse, 100)
                 End If
             End If
         Else
              result = "Error: Parse Fail (No Assistant Role)"
              LogEvt PROC_NAME, lgERROR, result, "Company=" & companyName & ", Response=" & Left(jsonResponse, 500) ' Use lgERROR
-             TraceEvt lvlERROR, PROC_NAME, "Parse Fail (No Assistant Role)", "Company=" & companyName & ", ResponseStart=" & Left(jsonResponse, 100)
+             mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Parse Fail (No Assistant Role)", "Company=" & companyName & ", ResponseStart=" & Left(jsonResponse, 100)
         End If
     Else
         ' HTTP Error
         result = "Error: API Call Failed - Status " & http.Status & " - " & http.statusText
          LogEvt PROC_NAME, lgERROR, result, "Company=" & companyName & ", Response=" & Left(http.responseText, 500) ' Use lgERROR
-         TraceEvt lvlERROR, PROC_NAME, "API Call Failed", "Company=" & companyName & ", Status=" & http.Status & ", ResponseStart=" & Left(http.responseText, 100)
+         mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "API Call Failed", "Company=" & companyName & ", Status=" & http.Status & ", ResponseStart=" & Left(http.responseText, 100)
     End If
 
     ' Cleanup and Finalize
@@ -336,7 +336,7 @@ Private Function GetCompanyRecapOpenAI(companyName As String) As String
 OpenAIErrorHandler:
     Dim errDesc As String: errDesc = Err.Description
      LogEvt PROC_NAME, lgERROR, "VBA Exception during OpenAI Call: " & errDesc, "Company=" & companyName ' Use lgERROR
-     TraceEvt lvlERROR, PROC_NAME, "VBA Exception", "Company=" & companyName & ", Err=" & Err.Number & " - " & errDesc
+     mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "VBA Exception", "Company=" & companyName & ", Err=" & Err.Number & " - " & errDesc
     GetCompanyRecapOpenAI = "Error: VBA Exception - " & errDesc ' Return VBA error string
     If Not http Is Nothing Then Set http = Nothing ' Clean up object on error
 End Function
@@ -351,7 +351,7 @@ Private Function GetAPIKey() As String
     Set WshShell = CreateObject("WScript.Shell")
     keyPath = WshShell.ExpandEnvironmentStrings(API_KEY_FILE_PATH) ' Assumes constant from mod_Config
     Set WshShell = Nothing
-    TraceEvt lvlDET, PROC_NAME, "Resolved API Key Path", keyPath
+    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Resolved API Key Path", keyPath
 
     Set fso = CreateObject("Scripting.FileSystemObject")
     If fso.FileExists(keyPath) Then
@@ -360,21 +360,21 @@ Private Function GetAPIKey() As String
         ts.Close
         If Len(Trim(fileContent)) > 0 Then
              LogEvt PROC_NAME, lgDETAIL, "API Key read successfully." ' Use lgDETAIL
-             TraceEvt lvlDET, PROC_NAME, "API Key read successfully"
+             mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "API Key read successfully"
         Else
              LogEvt PROC_NAME, lgWARN, "API Key file exists but is empty.", "Path=" & keyPath ' Use lgWARN
-             TraceEvt lvlWARN, PROC_NAME, "API Key file empty", "Path=" & keyPath
+             mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "API Key file empty", "Path=" & keyPath
         End If
     Else
          LogEvt PROC_NAME, lgWARN, "API Key file not found.", "Path=" & keyPath ' Use lgWARN
-         TraceEvt lvlWARN, PROC_NAME, "API Key file not found", "Path=" & keyPath
+         mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "API Key file not found", "Path=" & keyPath
         Debug.Print Time & " - WARNING: API Key file not found at specified path: " & keyPath
     End If
     GoTo KeyExit
 
 KeyError:
      LogEvt PROC_NAME, lgERROR, "Error reading API Key from '" & keyPath & "': " & Err.Description ' Use lgERROR
-     TraceEvt lvlERROR, PROC_NAME, "Error reading API Key file", "Path=" & keyPath & ", Err=" & Err.Number & " - " & Err.Description
+     mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error reading API Key file", "Path=" & keyPath & ", Err=" & Err.Number & " - " & Err.Description
     Debug.Print Time & " - ERROR reading API Key from '" & keyPath & "': " & Err.Description
 
 KeyExit:

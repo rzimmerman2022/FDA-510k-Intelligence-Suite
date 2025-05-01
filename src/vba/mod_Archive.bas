@@ -45,7 +45,7 @@ Public Function ArchiveIfNeeded(tblData As ListObject, archiveSheetName As Strin
 
     If tblData Is Nothing Then
         LogEvt PROC_NAME, lgERROR, "Invalid argument (Table is Nothing). Cannot archive."
-        TraceEvt lvlERROR, PROC_NAME, "Invalid argument", "TableIsNothing=True"
+        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Invalid argument", "TableIsNothing=True"
         Exit Function
     End If
 
@@ -55,7 +55,7 @@ Public Function ArchiveIfNeeded(tblData As ListObject, archiveSheetName As Strin
     On Error GoTo ArchiveError
 
     LogEvt PROC_NAME, lgINFO, "Archiving data sheet '" & wsData.Name & "' to '" & archiveSheetName & "'."
-    TraceEvt lvlINFO, PROC_NAME, "Start archiving", "SourceSheet=" & wsData.Name & ", ArchiveSheet=" & archiveSheetName
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Start archiving", "SourceSheet=" & wsData.Name & ", ArchiveSheet=" & archiveSheetName
 
     ' --- Disable alerts and screen updates for smoother copy ---
     Application.DisplayAlerts = False
@@ -70,7 +70,7 @@ Public Function ArchiveIfNeeded(tblData As ListObject, archiveSheetName As Strin
     wsArchive.Name = archiveSheetName
     If Err.Number <> 0 Then
         LogEvt PROC_NAME, lgERROR, "Failed to rename copied sheet to '" & archiveSheetName & "'. Error: " & Err.Description
-        TraceEvt lvlERROR, PROC_NAME, "Failed to rename archive sheet", "SheetName=" & archiveSheetName & ", Err=" & Err.Description
+        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Failed to rename archive sheet", "SheetName=" & archiveSheetName & ", Err=" & Err.Description
         ' Attempt to delete the failed copy
         On Error Resume Next
         wsArchive.Delete
@@ -86,10 +86,10 @@ Public Function ArchiveIfNeeded(tblData As ListObject, archiveSheetName As Strin
     If Err.Number = 0 And Not tblArchive Is Nothing Then
         tblArchive.Unlist ' Convert table to range
         LogEvt PROC_NAME, lgDETAIL, "Converted table to range on archive sheet.", "Sheet=" & archiveSheetName
-        TraceEvt lvlDET, PROC_NAME, "Converted table to range", "Sheet=" & archiveSheetName
+        mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Converted table to range", "Sheet=" & archiveSheetName
     Else
         LogEvt PROC_NAME, lgWARN, "Could not find or unlist table on archive sheet '" & archiveSheetName & "'.", "Err=" & Err.Description
-        TraceEvt lvlWARN, PROC_NAME, "Could not unlist table on archive", "Sheet=" & archiveSheetName & ", Err=" & Err.Description
+        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Could not unlist table on archive", "Sheet=" & archiveSheetName & ", Err=" & Err.Description
         Err.Clear ' Clear error and continue
     End If
     On Error GoTo ArchiveError ' Restore handler
@@ -102,7 +102,7 @@ Public Function ArchiveIfNeeded(tblData As ListObject, archiveSheetName As Strin
 
     ArchiveIfNeeded = True ' Success
     LogEvt PROC_NAME, lgINFO, "Successfully archived sheet to '" & archiveSheetName & "'."
-    TraceEvt lvlINFO, PROC_NAME, "Archiving successful", "ArchiveSheet=" & archiveSheetName
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Archiving successful", "ArchiveSheet=" & archiveSheetName
 
 ArchiveCleanup:
     ' --- Restore settings ---
@@ -116,7 +116,7 @@ ArchiveError:
     Dim errDesc As String: errDesc = Err.Description
     Dim errNum As Long: errNum = Err.Number
     LogEvt PROC_NAME, lgERROR, "Error during archiving process for '" & archiveSheetName & "'. Error #" & errNum & ": " & errDesc
-    TraceEvt lvlERROR, PROC_NAME, "Error during archiving", "ArchiveSheet=" & archiveSheetName & ", Err=" & errNum & " - " & errDesc
+    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error during archiving", "ArchiveSheet=" & archiveSheetName & ", Err=" & errNum & " - " & errDesc
     MsgBox "An error occurred during the archiving process: " & vbCrLf & errDesc, vbCritical, "Archiving Error"
     ' ArchiveIfNeeded remains False
     Resume ArchiveCleanup ' Go to cleanup section

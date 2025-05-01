@@ -54,6 +54,7 @@
 ' 2025-04-30  Cline (AI)      - Removed call to ClearExistingTable from RefreshPowerQuery
 '                               to avoid pre-refresh table manipulation errors. Duplicate
 '                               columns will be handled post-refresh by mod_Format.
+' 2025-04-30  Cline (AI)      - Qualified all TraceEvt calls with mod_DebugTraceHelpers.
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
@@ -71,13 +72,13 @@ Public Sub ClearExistingTable(lo As ListObject)
     Const PROC_NAME As String = "ClearExistingTable"
     If lo Is Nothing Then
         LogEvt PROC_NAME, lgWARN, "Target table object is Nothing. Cannot clear."
-        TraceEvt lvlWARN, PROC_NAME, "Target table object is Nothing"
+        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Target table object is Nothing"
         Exit Sub
     End If
 
     On Error GoTo ClearErrorHandler
     LogEvt PROC_NAME, lgINFO, "Attempting to clear range and delete table: " & lo.Name
-    TraceEvt lvlINFO, PROC_NAME, "Start clear range/delete", "Table=" & lo.Name
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Start clear range/delete", "Table=" & lo.Name
 
     ' Use With block for clarity
     With lo
@@ -88,14 +89,14 @@ Public Sub ClearExistingTable(lo As ListObject)
     End With
 
     LogEvt PROC_NAME, lgINFO, "Successfully cleared range and deleted table."
-    TraceEvt lvlINFO, PROC_NAME, "Clear range/delete successful"
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Clear range/delete successful"
     Exit Sub
 
 ClearErrorHandler:
     Dim errDesc As String: errDesc = Err.Description
     Dim errNum As Long: errNum = Err.Number
     LogEvt PROC_NAME, lgERROR, "Error clearing range/deleting table '" & lo.Name & "'. Error #" & errNum & ": " & errDesc
-    TraceEvt lvlERROR, PROC_NAME, "Error clearing range/deleting table", "Table='" & lo.Name & "', Err=" & errNum & " - " & errDesc
+    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error clearing range/deleting table", "Table='" & lo.Name & "', Err=" & errNum & " - " & errDesc
     ' Optionally re-raise or handle differently, but for now just log
 End Sub
 
@@ -109,7 +110,7 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
 
     If targetTable Is Nothing Then
         LogEvt PROC_NAME, lgERROR, "Target table object is Nothing. Cannot refresh."
-        TraceEvt lvlERROR, PROC_NAME, "Target table object is Nothing"
+        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Target table object is Nothing"
         Exit Function
     End If
 
@@ -117,69 +118,91 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
 
     ' --- Get the QueryTable directly from the ListObject ---
     LogEvt PROC_NAME, lgINFO, "Attempting to get QueryTable from ListObject: " & targetTable.Name
-    TraceEvt lvlINFO, PROC_NAME, "Getting QueryTable from ListObject", "Table=" & targetTable.Name
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Getting QueryTable from ListObject", "Table=" & targetTable.Name
     Set qt = targetTable.QueryTable
 
     If qt Is Nothing Then
         LogEvt PROC_NAME, lgERROR, "Could not find QueryTable associated with table '" & targetTable.Name & "'."
-        TraceEvt lvlERROR, PROC_NAME, "QueryTable object is Nothing", "Table='" & targetTable.Name & "'"
+        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "QueryTable object is Nothing", "Table='" & targetTable.Name & "'"
         MsgBox "Error: Could not find the Power Query connection associated with table '" & targetTable.Name & "'. Cannot refresh.", vbCritical, "Refresh Error"
         Exit Function ' Exit, cannot refresh
     End If
     LogEvt PROC_NAME, lgINFO, "Found QueryTable: " & qt.Name
-    TraceEvt lvlINFO, PROC_NAME, "Found QueryTable", "Name=" & qt.Name
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found QueryTable", "Name=" & qt.Name
 
     ' --- Ensure refresh is enabled BEFORE attempting ---
     If Not qt.EnableRefresh Then
         LogEvt PROC_NAME, lgWARN, "QueryTable refresh was disabled for '" & qt.Name & "'. Attempting to enable.", "Current EnableRefresh=" & qt.EnableRefresh
-        TraceEvt lvlWARN, PROC_NAME, "Refresh was disabled. Attempting enable.", "QueryTable='" & qt.Name & "'"
+        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Refresh was disabled. Attempting enable.", "QueryTable='" & qt.Name & "'"
         qt.EnableRefresh = True
         If Not qt.EnableRefresh Then
              LogEvt PROC_NAME, lgERROR, "Failed to set EnableRefresh=True for QueryTable '" & qt.Name & "'. Halting refresh attempt."
-             TraceEvt lvlERROR, PROC_NAME, "Failed to set EnableRefresh=True", "QueryTable='" & qt.Name & "'"
+             mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Failed to set EnableRefresh=True", "QueryTable='" & qt.Name & "'"
              MsgBox "Error: Could not enable refresh for QueryTable '" & qt.Name & "'.", vbCritical, "Refresh Error"
              Exit Function ' Cannot proceed
         Else
              LogEvt PROC_NAME, lgINFO, "Successfully set EnableRefresh=True for QueryTable '" & qt.Name & "'."
-             TraceEvt lvlINFO, PROC_NAME, "Successfully set EnableRefresh=True", "QueryTable='" & qt.Name & "'"
+             mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Successfully set EnableRefresh=True", "QueryTable='" & qt.Name & "'"
         End If
     Else
         LogEvt PROC_NAME, lgDETAIL, "QueryTable refresh already enabled for '" & qt.Name & "'.", "Current EnableRefresh=" & qt.EnableRefresh
-        TraceEvt lvlDET, PROC_NAME, "Refresh already enabled", "QueryTable='" & qt.Name & "'"
+        mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Refresh already enabled", "QueryTable='" & qt.Name & "'"
     End If
 
-    ' Refresh synchronously
-    qt.BackgroundQuery = False ' Ensure background query is off for synchronous refresh
-    LogEvt PROC_NAME, lgINFO, "Attempting synchronous refresh for QueryTable: " & qt.Name
-    TraceEvt lvlINFO, PROC_NAME, "Starting synchronous refresh", "QueryTable=" & qt.Name
-    qt.Refresh
+    ' --- Find the Workbook Connection ---
+    Dim wbConn As WorkbookConnection
+    Dim connName As String: connName = qt.Name ' Start assuming connection name matches QueryTable name
+    Dim connNameAlt As String: connNameAlt = "Query - " & qt.Name ' Alternative name format
 
-    ' --- Lock refresh settings post-query ---
+    On Error Resume Next ' Try finding connection by primary or alternative name
+    Set wbConn = ThisWorkbook.Connections(connName)
+    If wbConn Is Nothing Then Set wbConn = ThisWorkbook.Connections(connNameAlt)
+    On Error GoTo RefreshErrorHandler ' Restore main handler
+
+    If wbConn Is Nothing Then
+        LogEvt PROC_NAME, lgERROR, "Could not find WorkbookConnection named '" & connName & "' or '" & connNameAlt & "'."
+        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "WorkbookConnection not found", "TriedName1=" & connName & ", TriedName2=" & connNameAlt
+        MsgBox "Error: Could not find the Workbook Connection associated with QueryTable '" & qt.Name & "'. Cannot refresh.", vbCritical, "Refresh Error"
+        Exit Function
+    End If
+    LogEvt PROC_NAME, lgINFO, "Found WorkbookConnection: " & wbConn.Name
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found WorkbookConnection", "Name=" & wbConn.Name
+
+    ' --- Refresh via WorkbookConnection ---
+    wbConn.OLEDBConnection.BackgroundQuery = False ' Ensure synchronous refresh
+    LogEvt PROC_NAME, lgINFO, "Attempting synchronous refresh via WorkbookConnection: " & wbConn.Name
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Starting synchronous refresh via WorkbookConnection", "Connection=" & wbConn.Name
+    wbConn.Refresh ' <<< REFRESH VIA CONNECTION INSTEAD OF QUERYTABLE >>>
+
+    ' --- Lock refresh settings post-query (Optional for Connection, QueryTable settings might be sufficient) ---
+    ' It might be better to manage EnableRefresh via the QueryTable object as before,
+    ' but let's skip locking the connection for now to see if the refresh itself works.
+    ' Re-enable QueryTable locking as it controls sheet interaction
     On Error Resume Next ' Best effort to disable these
     qt.BackgroundQuery = False
     qt.EnableRefresh = False
-    If Err.Number <> 0 Then
-         LogEvt PROC_NAME, lgWARN, "Could not disable BackgroundQuery/EnableRefresh after refresh for QueryTable '" & qt.Name & "'. Error: " & Err.Description
-         TraceEvt lvlWARN, PROC_NAME, "Failed to set BackgroundQuery=False / EnableRefresh=False", "QueryTable='" & qt.Name & "', Err=" & Err.Description
+     If Err.Number <> 0 Then
+         LogEvt PROC_NAME, lgWARN, "Could not disable BackgroundQuery/EnableRefresh on QueryTable '" & qt.Name & "' after connection refresh. Error: " & Err.Description
+         mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Failed to set QueryTable BackgroundQuery=False / EnableRefresh=False post-connection-refresh", "QueryTable='" & qt.Name & "', Err=" & Err.Description
          Err.Clear
     Else
-         LogEvt PROC_NAME, lgDETAIL, "Set BackgroundQuery=False and EnableRefresh=False post-refresh for QueryTable '" & qt.Name & "'."
-         TraceEvt lvlDET, PROC_NAME, "Set BackgroundQuery=False / EnableRefresh=False post-refresh", "QueryTable='" & qt.Name & "'"
+         LogEvt PROC_NAME, lgDETAIL, "Set QueryTable BackgroundQuery=False and EnableRefresh=False post-connection-refresh for '" & qt.Name & "'."
+         mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Set QueryTable BackgroundQuery=False / EnableRefresh=False post-connection-refresh", "QueryTable='" & qt.Name & "'"
     End If
     On Error GoTo RefreshErrorHandler ' Restore main handler
 
     RefreshPowerQuery = True ' If refresh completes without error
-    LogEvt PROC_NAME, lgINFO, "QueryTable refresh completed successfully for: " & qt.Name
-    TraceEvt lvlINFO, PROC_NAME, "Refresh successful", "QueryTable='" & qt.Name & "'"
+    LogEvt PROC_NAME, lgINFO, "WorkbookConnection refresh completed successfully for: " & wbConn.Name
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Refresh successful via WorkbookConnection", "Connection=" & wbConn.Name
     Exit Function
 
 RefreshErrorHandler:
     Dim errDesc As String: errDesc = Err.Description
     Dim errNum As Long: errNum = Err.Number
     RefreshPowerQuery = False ' Ensure False is returned
-    LogEvt PROC_NAME, lgERROR, "Error during QueryTable refresh process. Error #" & errNum & ": " & errDesc
-    TraceEvt lvlERROR, PROC_NAME, "Error during QueryTable refresh process", "Err=" & errNum & " - " & errDesc
-    MsgBox "QueryTable refresh failed: " & vbCrLf & errDesc, vbExclamation, "Refresh Error"
+    LogEvt PROC_NAME, lgERROR, "Error during WorkbookConnection refresh process. Error #" & errNum & ": " & errDesc
+    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error during WorkbookConnection refresh process", "Err=" & errNum & " - " & errDesc
+    MsgBox "WorkbookConnection refresh failed: " & vbCrLf & errDesc, vbExclamation, "Refresh Error" ' Updated MsgBox text
     ' Exit Function ' Exit implicitly after error handler
 End Function
 
@@ -201,7 +224,7 @@ Public Sub CleanupDuplicateConnections()
     Dim originalConnection As WorkbookConnection ' To store ref if found
     Set originalConnection = Nothing
 
-    TraceEvt lvlINFO, PROC_NAME, "Phase: Cleanup Connections Start"
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Phase: Cleanup Connections Start"
 
     ' Try to find the original connection by common names
     On Error Resume Next
@@ -212,13 +235,13 @@ Public Sub CleanupDuplicateConnections()
     If Not originalConnection Is Nothing Then
         baseConnectionName = originalConnection.Name
         LogEvt PROC_NAME, lgINFO, "Checking for duplicate connections based on found connection: '" & baseConnectionName & "'"
-        TraceEvt lvlINFO, PROC_NAME, "Checking duplicate connections", "Base=" & baseConnectionName
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Checking duplicate connections", "Base=" & baseConnectionName
         On Error Resume Next ' Ignore errors during loop/delete
         For Each c In ThisWorkbook.Connections
             ' Check if name is different AND follows the "Base Name (Number)" pattern
             If c.Name <> baseConnectionName And c.Name Like baseConnectionName & " (*" Then
                 LogEvt PROC_NAME, lgDETAIL, "Deleting duplicate connection: " & c.Name
-                TraceEvt lvlDET, PROC_NAME, "Deleting duplicate connection", c.Name
+                mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Deleting duplicate connection", c.Name
                 c.Delete
             End If
         Next c
@@ -227,12 +250,12 @@ Public Sub CleanupDuplicateConnections()
          ' Fallback if original connection wasn't found by name
          baseConnectionName = "pgGet510kData" ' Assume this is the most likely base
          LogEvt PROC_NAME, lgWARN, "Could not find original PQ connection by typical names. Attempting cleanup based on pattern: '" & baseConnectionName & " (*' or 'Query - " & baseConnectionName & " (*'"
-         TraceEvt lvlWARN, PROC_NAME, "Original PQ Connection not found", "FallbackBase=" & baseConnectionName
+         mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Original PQ Connection not found", "FallbackBase=" & baseConnectionName
          On Error Resume Next ' Ignore errors during loop/delete
          For Each c In ThisWorkbook.Connections
              If c.Name Like baseConnectionName & " (*" Or c.Name Like "Query - " & baseConnectionName & " (*" Then
                  LogEvt PROC_NAME, lgDETAIL, "Deleting potential duplicate connection: " & c.Name
-                 TraceEvt lvlDET, PROC_NAME, "Deleting potential duplicate connection", c.Name
+                 mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Deleting potential duplicate connection", c.Name
                  c.Delete
              End If
          Next c
@@ -241,7 +264,7 @@ Public Sub CleanupDuplicateConnections()
 
     Set c = Nothing
     Set originalConnection = Nothing
-    TraceEvt lvlINFO, PROC_NAME, "Phase: Cleanup Connections End"
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Phase: Cleanup Connections End"
 End Sub
 
 Public Function ArrayToTable(dataArr As Variant, targetTable As ListObject) As Boolean
@@ -252,13 +275,13 @@ Public Function ArrayToTable(dataArr As Variant, targetTable As ListObject) As B
 
     If targetTable Is Nothing Then
         LogEvt PROC_NAME, lgERROR, "Target table object is Nothing. Cannot write array."
-        TraceEvt lvlERROR, PROC_NAME, "Target table object is Nothing"
+        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Target table object is Nothing"
         Exit Function
     End If
 
     If Not IsArray(dataArr) Then
         LogEvt PROC_NAME, lgERROR, "Input dataArr is not a valid array. Cannot write."
-        TraceEvt lvlERROR, PROC_NAME, "Input dataArr is not an array", "Table=" & targetTable.Name
+        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Input dataArr is not an array", "Table=" & targetTable.Name
         Exit Function
     End If
 
@@ -270,7 +293,7 @@ Public Function ArrayToTable(dataArr As Variant, targetTable As ListObject) As B
     numCols = UBound(dataArr, 2) - LBound(dataArr, 2) + 1
     If Err.Number <> 0 Then
         LogEvt PROC_NAME, lgERROR, "Error getting bounds of dataArr. Cannot write.", "Table=" & targetTable.Name & ", Err=" & Err.Description
-        TraceEvt lvlERROR, PROC_NAME, "Error getting array bounds", "Table=" & targetTable.Name & ", Err=" & Err.Description
+        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error getting array bounds", "Table=" & targetTable.Name & ", Err=" & Err.Description
         Err.Clear
         On Error GoTo WriteErrorHandler ' Restore handler
         Exit Function
@@ -278,7 +301,7 @@ Public Function ArrayToTable(dataArr As Variant, targetTable As ListObject) As B
     On Error GoTo WriteErrorHandler ' Restore handler
 
     LogEvt PROC_NAME, lgDETAIL, "Attempting to write array (" & numRows & "x" & numCols & ") to table '" & targetTable.Name & "'."
-    TraceEvt lvlDET, PROC_NAME, "Start writing array to table", "Table=" & targetTable.Name & ", Size=" & numRows & "x" & numCols
+    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Start writing array to table", "Table=" & targetTable.Name & ", Size=" & numRows & "x" & numCols
 
     ' --- Resize table if necessary (optional, but safer) ---
     ' Clear existing data first to avoid issues if new array is smaller
@@ -295,7 +318,7 @@ Public Function ArrayToTable(dataArr As Variant, targetTable As ListObject) As B
 
     ArrayToTable = True ' Success
     LogEvt PROC_NAME, lgINFO, "Successfully wrote array to table '" & targetTable.Name & "'."
-    TraceEvt lvlINFO, PROC_NAME, "Array write successful", "Table=" & targetTable.Name
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Array write successful", "Table=" & targetTable.Name
     Exit Function
 
 WriteErrorHandler:
@@ -303,7 +326,7 @@ WriteErrorHandler:
     Dim errNum As Long: errNum = Err.Number
     ArrayToTable = False ' Ensure False is returned
     LogEvt PROC_NAME, lgERROR, "Error writing array to table '" & targetTable.Name & "'. Error #" & errNum & ": " & errDesc
-    TraceEvt lvlERROR, PROC_NAME, "Error writing array to table", "Table='" & targetTable.Name & "', Err=" & errNum & " - " & errDesc
+    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error writing array to table", "Table='" & targetTable.Name & "', Err=" & errNum & " - " & errDesc
     MsgBox "Error writing data back to table '" & targetTable.Name & "': " & vbCrLf & errDesc, vbExclamation, "Write Error"
     ' Exit Function ' Exit implicitly after error handler
 End Function

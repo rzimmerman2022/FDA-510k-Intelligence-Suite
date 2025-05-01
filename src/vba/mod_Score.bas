@@ -153,7 +153,7 @@ Public Function Calculate510kScore(dataArr As Variant, rowIdx As Long, ByVal col
 ScoreErrorHandler:
     Dim errDesc As String: errDesc = Err.Description
     LogEvt PROC_NAME, lgERROR, "Error scoring row " & rowIdx & " (K#: " & kNum & "): " & errDesc, "AC=" & AC & ", PC=" & PC ' Use lgERROR
-    TraceEvt lvlERROR, PROC_NAME, "Error scoring row", "Row=" & rowIdx & ", K#=" & kNum & ", Err=" & Err.Number & " - " & errDesc
+    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error scoring row", "Row=" & rowIdx & ", K#=" & kNum & ", Err=" & Err.Number & " - " & errDesc
     Debug.Print Time & " - ERROR scoring row " & rowIdx & " (K#: " & kNum & "): " & errDesc
     Calculate510kScore = Array(0, "Error", 0, 0, 0, 0, 0, 0, 0, 0) ' Return error state array
 End Function
@@ -213,7 +213,7 @@ CheckKeywordsExit:
 
 CheckKeywordsErrorHandler:
     LogEvt PROC_NAME, lgERROR, "Error during RegExp keyword check: " & Err.Description ' Use lgERROR
-    TraceEvt lvlERROR, PROC_NAME, "RegExp Error", "Err=" & Err.Number & " - " & Err.Description
+    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "RegExp Error", "Err=" & Err.Number & " - " & Err.Description
     Debug.Print Time & " - ERROR in CheckKeywords RegExp: " & Err.Description
     CheckKeywords = False ' Return False on error
     Resume CheckKeywordsExit ' Go to cleanup

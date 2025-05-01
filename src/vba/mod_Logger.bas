@@ -69,6 +69,7 @@ Private logBuf As tBuf
 ' Using the Public LogLevel Enum in the signature
 Public Sub LogEvt(stepTxt As String, level As LogLevel, msg As String, _
            Optional extra As String = "")
+    Debug.Print Now & " - LogEvt: Entered. Step=" & stepTxt & ", Level=" & level & ", Msg=" & msg ' <<< DEBUG PRINT ADDED
     ' Purpose: Adds an event entry to the in-memory log buffer.
     ' Inputs:  stepTxt - Identifier for the process step.
     '          level - The severity level (using LogLevel Enum).
@@ -83,9 +84,13 @@ Public Sub LogEvt(stepTxt As String, level As LogLevel, msg As String, _
 
     ' Initialize logger (get RunID, create buffer) on first call per session
     If logBuf.runID = "" Then
+        Debug.Print Now & " - LogEvt: Calling InitLogger..." ' <<< DEBUG PRINT ADDED
         InitLogger
         ' Check if InitLogger failed silently (e.g., runID still empty or logger closed)
-        If logBuf.runID = "" Or logBuf.isClosed Then Exit Sub
+        If logBuf.runID = "" Or logBuf.isClosed Then
+            Debug.Print Now & " - LogEvt: Exiting because InitLogger failed or logger is closed." ' <<< DEBUG PRINT ADDED
+            Exit Sub
+        End If
     End If
 
     ' Increment row pointer
@@ -111,9 +116,13 @@ End Sub
 Public Sub FlushLogBuf()
     ' Purpose: Writes the entire contents of the in-memory log buffer to the hidden RunLog sheet.
     '          Should be called once at the very end of the main process or before closing.
+    Debug.Print Now & " - FlushLogBuf: Entered. isClosed=" & logBuf.isClosed & ", Used=" & logBuf.used ' <<< DEBUG PRINT ADDED
 
     ' Don't try to flush if already closed or buffer empty
-    If logBuf.isClosed Or logBuf.used = 0 Then Exit Sub
+    If logBuf.isClosed Or logBuf.used = 0 Then
+        Debug.Print Now & " - FlushLogBuf: Exiting because logger closed or buffer empty." ' <<< DEBUG PRINT ADDED
+        Exit Sub
+    End If
 
     Dim ws As Worksheet
     Dim nextRow As Long
@@ -121,8 +130,12 @@ Public Sub FlushLogBuf()
     On Error GoTo FlushError ' Handle errors during sheet writing
 
     ' Get the log sheet object (creates if it doesn't exist)
+    Debug.Print Now & " - FlushLogBuf: Calling EnsureLogSheet..." ' <<< DEBUG PRINT ADDED
     Set ws = EnsureLogSheet
-    If ws Is Nothing Then GoTo ResetBufferAndExit ' Exit if sheet couldn't be created/found
+    If ws Is Nothing Then
+        Debug.Print Now & " - FlushLogBuf: EnsureLogSheet returned Nothing. Going to ResetBufferAndExit." ' <<< DEBUG PRINT ADDED
+        GoTo ResetBufferAndExit ' Exit if sheet couldn't be created/found
+    End If
 
     ' Find the next empty row on the log sheet (based on RunID column A)
     nextRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row + 1
@@ -141,12 +154,14 @@ Public Sub FlushLogBuf()
     If Not writeSuccess Then
         ' Attempt to write a simplified error message directly to the sheet
         On Error Resume Next
-        ws.Cells(nextRow, 1).Resize(1, LOG_COL_COUNT).value = _
+    ws.Cells(nextRow, 1).Resize(1, LOG_COL_COUNT).value = _
             Array(logBuf.runID, Now, Environ$("USERNAME"), "FlushError", "ERROR", "Failed to write log buffer via Application.Index", writeErrDesc)
+        Debug.Print Now & " - FlushLogBuf: Attempted to write simplified error message after Index write failure. Err=" & Err.Number ' <<< DEBUG PRINT ADDED
         On Error GoTo 0
     End If
 
 ResetBufferAndExit:
+    Debug.Print Now & " - FlushLogBuf: Reached ResetBufferAndExit." ' <<< DEBUG PRINT ADDED
     ' Clear the buffer array and reset state variables after attempting flush
     Erase logBuf.data
     logBuf.used = 0
@@ -158,6 +173,7 @@ ResetBufferAndExit:
 FlushError:
      Dim errNum As Long: errNum = Err.Number ' Capture error info
      Dim errDesc As String: errDesc = Err.Description ' Capture error info
+     Debug.Print Now & " - FlushLogBuf: ERROR HANDLER REACHED. Err=" & errNum & ", Desc=" & errDesc ' <<< DEBUG PRINT ADDED
      ' Set isClosed flag on fatal error during flush
      logBuf.isClosed = True
      ' Optionally attempt to reset buffer even on error
@@ -210,6 +226,7 @@ Private Sub InitLogger()
     ' ------------------------------------------
 
     ' Purpose: Initializes the log buffer for a new session. Gets RunID, allocates initial array size.
+    Debug.Print Now & " - InitLogger: Entered." ' <<< DEBUG PRINT ADDED
     Dim guidErrNum As Long
     Dim guidErrDesc As String
 
@@ -221,6 +238,9 @@ Private Sub InitLogger()
 
     If guidErrNum <> 0 Then
         logBuf.runID = "ErrorGUID_" & Format(Now, "yyyymmddhhmmss") ' Fallback ID
+        Debug.Print Now & " - InitLogger: Failed to create GUID. Using fallback ID. Err=" & guidErrNum & ", Desc=" & guidErrDesc ' <<< DEBUG PRINT ADDED
+    Else
+        Debug.Print Now & " - InitLogger: Successfully created GUID: " & logBuf.runID ' <<< DEBUG PRINT ADDED
     End If
 
     ' Pre-allocate the first chunk of the buffer array
@@ -233,22 +253,27 @@ Private Sub InitLogger()
     ' Assuming mod_Config.VERSION_INFO is accessible
     On Error Resume Next ' Avoid error if VERSION_INFO isn't ready yet or LogEvt fails early
     LogEvt "Logger", LogLevel.lgINFO, "Session started.", "Version=" & mod_Config.VERSION_INFO ' Corrected module reference
+    If Err.Number <> 0 Then Debug.Print Now & " - InitLogger: Error during initial LogEvt call. Err=" & Err.Number & ", Desc=" & Err.Description ' <<< DEBUG PRINT ADDED
     On Error GoTo InitError ' Restore main error handler
 
+    Debug.Print Now & " - InitLogger: Exiting normally." ' <<< DEBUG PRINT ADDED
     Exit Sub ' Normal Exit
 
 InitError: ' --- ADDED: Error Handler ---
     Dim errNum As Long: errNum = Err.Number
     Dim errDesc As String: errDesc = Err.Description
+    Debug.Print Now & " - InitLogger: ERROR HANDLER REACHED. Err=" & errNum & ", Desc=" & errDesc ' <<< DEBUG PRINT ADDED
     ' Attempt to set a RunID so subsequent LogEvt calls don't keep trying InitLogger
     If logBuf.runID = "" Then logBuf.runID = "INIT_FAILED_" & Format(Now, "yyyymmddhhmmss")
     logBuf.isClosed = True ' Mark logger as closed to prevent further attempts
+    Debug.Print Now & " - InitLogger: Marked logger as closed due to error." ' <<< DEBUG PRINT ADDED
     ' Do not Resume Next, let the error propagate or exit cleanly
 End Sub
 
 Private Function EnsureLogSheet() As Worksheet
     ' Purpose: Finds the log sheet or creates it if it doesn't exist.
     ' Returns: Worksheet object for the log sheet, or Nothing on failure.
+    Debug.Print Now & " - EnsureLogSheet: Entered. Looking for sheet '" & LOG_SHEET & "'." ' <<< DEBUG PRINT ADDED
     Dim ws As Worksheet
     Dim findErrNum As Long
     Dim findErrDesc As String
@@ -260,6 +285,7 @@ Private Function EnsureLogSheet() As Worksheet
     On Error GoTo 0 ' Restore default error handling
 
     If ws Is Nothing Then
+        Debug.Print Now & " - EnsureLogSheet: Sheet '" & LOG_SHEET & "' not found. Attempting creation." ' <<< DEBUG PRINT ADDED
         ' Sheet doesn't exist, try to create it
         Dim createErrNum As Long
         Dim createErrDesc As String
@@ -276,13 +302,18 @@ Private Function EnsureLogSheet() As Worksheet
                  ws.Visible = xlSheetVeryHidden
                  ws.Range("A1").Resize(1, LOG_COL_COUNT).value = Array("RunID", "Timestamp", "User", "Step", "Level", "Message", "Extra")
                  ws.Range("A1").Resize(1, LOG_COL_COUNT).Font.Bold = True
+                 Debug.Print Now & " - EnsureLogSheet: Successfully created and setup sheet '" & LOG_SHEET & "'." ' <<< DEBUG PRINT ADDED
             Else
+                 Debug.Print Now & " - EnsureLogSheet: FAILED to rename sheet to '" & LOG_SHEET & "'. Err=" & createErrNum & ", Desc=" & createErrDesc ' <<< DEBUG PRINT ADDED
                  Set ws = Nothing ' Return Nothing on failure
             End If
         Else
+            Debug.Print Now & " - EnsureLogSheet: FAILED to add new sheet. Err=" & createErrNum & ", Desc=" & createErrDesc ' <<< DEBUG PRINT ADDED
             Set ws = Nothing ' Return Nothing on failure
         End If
         On Error GoTo 0 ' Restore default error handling
+    Else
+        Debug.Print Now & " - EnsureLogSheet: Found existing sheet '" & LOG_SHEET & "'." ' <<< DEBUG PRINT ADDED
     End If
     Set EnsureLogSheet = ws
 End Function
