@@ -34,6 +34,11 @@
 ' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
 ' 2025-04-29  Cline (AI)      - Corrected module reference for RefreshPowerQuery call
 '                               (changed from mod_510k_Processor to mod_DataIO).
+' 2025-04-30  Cline (AI)      - Removed explicit module qualifier from RefreshPowerQuery
+'                               call to attempt resolution of compile error.
+' 2025-04-30  Cline (AI)      - Reverted: Restored explicit module qualifier (mod_DataIO.)
+'                               for RefreshPowerQuery call.
+' 2025-04-30  Cline (AI)      - Added call to mod_DataIO.TestCall for debugging compile error.
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
@@ -93,8 +98,21 @@ Private Sub Workbook_Open()
         ' Decide if you want to stop here or continue without refresh
         ' GoTo OpenCleanExit ' Option to stop
     Else
+        ' Call TestCall first to isolate compile error
+        Dim testSuccess As Boolean
+        On Error Resume Next ' Temporarily allow error on test call
+        testSuccess = mod_DataIO.TestCall()
+        If Err.Number <> 0 Then
+             Debug.Print Time & " - COMPILE ERROR likely on TestCall: " & Err.Description
+             MsgBox "Compile error calling TestCall from mod_DataIO.", vbCritical
+             Err.Clear
+             GoTo OpenCleanExit ' Exit if test call fails
+        End If
+        On Error GoTo OpenErrorHandler ' Restore main handler
+
         ' Call RefreshPowerQuery with the table object
-        refreshSuccess = mod_DataIO.RefreshPowerQuery(tblData) ' Corrected module reference
+        ' Restored explicit module qualifier
+        refreshSuccess = mod_DataIO.RefreshPowerQuery(tblData)
         If refreshSuccess Then
             Debug.Print Time & " - Power Query refresh step completed for table '" & tblData.Name & "'."
         Else

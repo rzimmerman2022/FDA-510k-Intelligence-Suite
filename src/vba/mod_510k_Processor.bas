@@ -48,6 +48,8 @@
 '                               dictACWeights, dictCache, keyword lists).
 ' 2025-04-30  Cline (AI)      - Corrected undefined variable 'VERSION_INFO' by adding
 '                               module qualifier 'mod_Config.' in initial logging calls.
+' 2025-04-30  Cline (AI)      - Added FlushLogBuf call in ProcessErrorHandler to ensure
+'                               log buffer is written even when errors occur.
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 '--- Code for Module: mod_510k_Processor ---
@@ -405,6 +407,11 @@ ProcessErrorHandler:
     Dim errNum As Long: errNum = Err.Number
     LogEvt "ProcessError", lgERROR, "Unhandled Error #" & errNum & " in ProcessMonthly510k: " & errDesc ' Use lgERROR instead of lgCRITICAL
     TraceEvt lvlERROR, "ProcessMonthly510k", "FATAL ERROR", "Err=" & errNum & " - " & errDesc ' Use lvlERROR instead of lvlFATAL
+    ' --- Explicitly flush log buffer on error ---
+    On Error Resume Next ' Prevent error in Flush from masking original error
+    FlushLogBuf
+    On Error GoTo 0 ' Restore default error handling (though we are exiting)
+    ' --- End Flush ---
     MsgBox "An unexpected error occurred: " & vbCrLf & errDesc & vbCrLf & "Please check the RunLog sheet for details.", vbCritical, "Processing Error"
     ' Fall through to CleanExit
 

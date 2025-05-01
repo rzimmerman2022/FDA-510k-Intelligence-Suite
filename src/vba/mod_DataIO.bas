@@ -34,10 +34,18 @@
 ' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
 ' 2025-04-30  Cline (AI)      - Ensure EnableRefresh is True before attempting refresh
 '                               in RefreshPowerQuery to fix "Refresh disabled" error.
+' 2025-04-30  Cline (AI)      - Made EnableRefresh check more explicit in RefreshPowerQuery
+'                               and removed On Error Resume Next around setting it True.
+' 2025-04-30  Cline (AI)      - Added simple TestCall function for debugging compile error.
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
 Attribute VB_Name = "mod_DataIO"
+
+Public Function TestCall() As Boolean
+    ' Simple test function
+    TestCall = True
+End Function
 
 Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
     ' Purpose: Refreshes the Power Query associated with the target table using QueryTable object.
@@ -65,17 +73,28 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
     End If
 
     ' --- Ensure refresh is enabled BEFORE attempting ---
-    On Error Resume Next ' Handle potential error setting property
-    qt.EnableRefresh = True
-    If Err.Number <> 0 Then
-        LogEvt PROC_NAME, lgWARN, "Could not set EnableRefresh=True before refresh for table '" & targetTable.Name & "'. Refresh might fail. Error: " & Err.Description
-        TraceEvt lvlWARN, PROC_NAME, "Failed to set EnableRefresh=True", "Table='" & targetTable.Name & "', Err=" & Err.Description
-        Err.Clear
+    If Not qt.EnableRefresh Then
+        LogEvt PROC_NAME, lgWARN, "QueryTable refresh was disabled for '" & targetTable.Name & "'. Attempting to enable.", "Current EnableRefresh=" & qt.EnableRefresh
+        TraceEvt lvlWARN, PROC_NAME, "Refresh was disabled. Attempting enable.", "Table='" & targetTable.Name & "'"
+        ' Removed On Error Resume Next here to catch potential errors setting the property
+        qt.EnableRefresh = True
+        ' Re-check if it succeeded
+        If Not qt.EnableRefresh Then
+             LogEvt PROC_NAME, lgERROR, "Failed to set EnableRefresh=True for table '" & targetTable.Name & "'. Halting refresh attempt."
+             TraceEvt lvlERROR, PROC_NAME, "Failed to set EnableRefresh=True", "Table='" & targetTable.Name & "'"
+             MsgBox "Error: Could not enable refresh for table '" & targetTable.Name & "'.", vbCritical, "Refresh Error"
+             Exit Function ' Cannot proceed
+        Else
+             LogEvt PROC_NAME, lgINFO, "Successfully set EnableRefresh=True for table '" & targetTable.Name & "'."
+             TraceEvt lvlINFO, PROC_NAME, "Successfully set EnableRefresh=True", "Table='" & targetTable.Name & "'"
+        End If
+    Else
+        LogEvt PROC_NAME, lgDETAIL, "QueryTable refresh already enabled for '" & targetTable.Name & "'.", "Current EnableRefresh=" & qt.EnableRefresh
+        TraceEvt lvlDET, PROC_NAME, "Refresh already enabled", "Table='" & targetTable.Name & "'"
     End If
-    On Error GoTo RefreshErrorHandler ' Restore main handler
 
     ' Refresh synchronously
-    qt.BackgroundQuery = False
+    qt.BackgroundQuery = False ' Ensure background query is off for synchronous refresh
     qt.Refresh
 
     ' --- Lock refresh settings post-query (per review suggestion) ---
