@@ -34,11 +34,14 @@
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
-Attribute VB_Name = "mod_Config"
+
+' --- Feature Flags & Advanced Settings ---
+Public Const ENABLE_MAINTAINER_MODE As Boolean = False  ' <<< SET TO True to enable maintainer-specific logic (like bypassing some checks)
+Public Const ENABLE_OPENAI_API_CALLS As Boolean = False ' <<< SET TO True to attempt OpenAI API calls for company recaps
 
 ' --- Essential Configuration ---
-' *** IMPORTANT: SET YOUR WINDOWS USERNAME FOR MAINTAINER FEATURES (e.g., OpenAI, DebugMode) ***
-Public Const MAINTAINER_USERNAME As String = "YourWindowsUsername" ' <<< UPDATE THIS
+' *** MAINTAINER_USERNAME is only used when ENABLE_MAINTAINER_MODE is True ***
+Public Const MAINTAINER_USERNAME As String = "YourWindowsUsername" ' <<< Only needed if ENABLE_MAINTAINER_MODE = True
 
 ' *** Double-check these names match your Excel objects ***
 Public Const DATA_SHEET_NAME As String = "CurrentMonthData"  ' Sheet where Power Query loads data

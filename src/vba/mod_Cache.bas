@@ -51,7 +51,6 @@
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
-Attribute VB_Name = "mod_Cache"
 
 ' Module-level variable for the in-memory cache
 Private dictCache As Object ' Scripting.Dictionary: Key=CompanyName, Value=RecapText
@@ -201,7 +200,7 @@ Public Sub SaveCompanyCache(wsCache As Worksheet)
         .Range("A2:C" & .Rows.Count).ClearContents
         If saveCount > 0 Then
             ' Write the new data
-            .Range("A2").Resize(saveCount, 3).Value = outputArr
+            .Range("A2").Resize(saveCount, 3).value = outputArr
             ' Format the timestamp column
             .Range("C2").Resize(saveCount, 1).NumberFormat = "m/d/yyyy h:mm AM/PM"
             ' Autofit columns after writing
@@ -233,12 +232,20 @@ Private Function GetCompanyRecapOpenAI(companyName As String) As String
     Dim apiKey As String, result As String, http As Object, url As String, jsonPayload As String, jsonResponse As String
     Const PROC_NAME As String = "mod_Cache.GetCompanyRecapOpenAI" ' Updated PROC_NAME
     GetCompanyRecapOpenAI = "" ' Default return value
+    
+    ' Check if OpenAI API calls are enabled globally
+    If Not mod_Config.ENABLE_OPENAI_API_CALLS Then
+        GetCompanyRecapOpenAI = "OpenAI disabled"   ' early exit
+        LogEvt PROC_NAME, lgINFO, "Skipped OpenAI Call: Feature disabled globally.", "Company=" & companyName
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Skipped: Feature disabled", "Company=" & companyName
+        Exit Function
+    End If
 
     ' Double-check maintainer status (though already checked by caller)
     ' Assumes IsMaintainerUser is available (e.g., in mod_Utils or mod_Config)
     If Not IsMaintainerUser() Then ' Requires mod_Utils or similar
          LogEvt PROC_NAME, lgINFO, "Skipped OpenAI Call: Not Maintainer User.", "Company=" & companyName ' Use lgINFO
-         mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Skipped: Not Maintainer" , "Company=" & companyName
+         mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Skipped: Not Maintainer", "Company=" & companyName
         Exit Function ' Should not happen if called correctly, but safe
     End If
 

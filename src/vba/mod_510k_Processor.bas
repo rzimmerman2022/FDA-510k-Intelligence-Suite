@@ -61,7 +61,6 @@
 ' ==========================================================================
 '--- Code for Module: mod_510k_Processor ---
 Option Explicit
-Attribute VB_Name = "mod_510k_Processor"
 
 #Const REFACTOR_MODE = 0 '<<< Refactoring complete for this module's orchestration
 
@@ -161,7 +160,7 @@ Public Sub ProcessMonthly510k()
                                                  XlListObjectHasHeaders:=xlYes)
             If Not tblData Is Nothing Then
                 tblData.Name = "pgGet510kData_" & Format(Now, "yyyymmddhhmmss") ' Give unique name
-                LogEvt "DataTable", lgWARN, "Table was missing – recreated from current region as '" & tblData.Name & "'."
+                LogEvt "DataTable", lgWARN, "Table was missing â€“ recreated from current region as '" & tblData.Name & "'."
                 mod_DebugTraceHelpers.TraceEvt lvlWARN, "ProcessMonthly510k", "Data table missing, recreated as '" & tblData.Name & "'"
             Else
                 LogEvt "DataTable", lgERROR, "Table was missing and failed to recreate from current region."
@@ -194,7 +193,7 @@ Public Sub ProcessMonthly510k()
                     LogEvt "DataTable", lgWARN, _
                            "Table not found; attempting to recreate it by refreshing connection: " & pq.Name
                     mod_DebugTraceHelpers.TraceEvt lvlWARN, "ProcessMonthly510k", _
-                             "Table missing – refreshing connection", "Conn=" & pq.Name
+                             "Table missing â€“ refreshing connection", "Conn=" & pq.Name
 
                     pq.Refresh                         ' loads data to sheet, should recreate ListObject
                     foundConnection = True
@@ -344,7 +343,7 @@ Public Sub ProcessMonthly510k()
     If recordCount = 1 Then
         ' Handle single row specifically to ensure 2D array
         Dim singleRowData As Variant
-        singleRowData = tblData.DataBodyRange.Value ' Read value first
+        singleRowData = tblData.DataBodyRange.value ' Read value first
         ' Check if it's already a 2D array (1 row, N columns)
         If Not IsArray(singleRowData) Then
             ' If not an array, it's a single value; create a 1x1 2D array
@@ -371,8 +370,13 @@ Public Sub ProcessMonthly510k()
     mod_DebugTraceHelpers.TraceEvt lvlINFO, "ProcessMonthly510k", "Phase: Read Data to Array End"
 
     ' --- Determine if OpenAI should be used ---
-    useOpenAI = mod_Utils.IsMaintainerUser() ' Use mod_Utils
-    LogEvt "OpenAICheck", lgINFO, "OpenAI usage check", "IsMaintainer=" & useOpenAI
+    ' OpenAI calls are attempted if:
+    ' 1. Global OpenAI API flag is TRUE (mod_Config.ENABLE_OPENAI_API_CALLS)
+    ' 2. User has Maintainer privileges (mod_Utils.IsMaintainerUser(), which now respects mod_Config.ENABLE_MAINTAINER_MODE)
+    useOpenAI = mod_Config.ENABLE_OPENAI_API_CALLS And mod_Utils.IsMaintainerUser()
+    LogEvt "OpenAICheck", lgINFO, "OpenAI usage determination", "EnableOpenAICalls=" & mod_Config.ENABLE_OPENAI_API_CALLS & _
+                                                              ", IsMaintainerUserLogic=" & mod_Utils.IsMaintainerUser() & _
+                                                              ", FinalUseOpenAI=" & useOpenAI
 
     ' --- Process Each Row ---
     Application.StatusBar = "Calculating scores and fetching recaps (0% complete)..."

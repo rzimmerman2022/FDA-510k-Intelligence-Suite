@@ -41,7 +41,6 @@
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
-Attribute VB_Name = "mod_Utils"
 
 Public Function GetWorksheets(ByRef wsData As Worksheet, ByRef wsWeights As Worksheet, ByRef wsCache As Worksheet) As Boolean
     ' Purpose: Safely gets required worksheet objects, logs errors if not found.
@@ -72,9 +71,16 @@ Public Function GetWorksheets(ByRef wsData As Worksheet, ByRef wsWeights As Work
 End Function
 
 Public Function IsMaintainerUser() As Boolean
-    ' Purpose: Checks if the current user matches the configured maintainer username.
+    ' Purpose: Checks if the current user matches the configured maintainer username
+    '          AND if maintainer mode is globally enabled.
     '          Used to enable/disable features like OpenAI calls or bypassing archive checks.
-    IsMaintainerUser = (LCase(Environ("USERNAME")) = LCase(MAINTAINER_USERNAME))
+    
+    If Not mod_Config.ENABLE_MAINTAINER_MODE Then ' Check the global switch first
+        IsMaintainerUser = False
+    Else
+        ' Only check username if maintainer mode is enabled
+        IsMaintainerUser = (LCase(Environ("USERNAME")) = LCase(MAINTAINER_USERNAME))
+    End If
 End Function
 
 Public Sub EnsureUIOn(Optional restoreCalcState As XlCalculation = xlCalculationManual)
