@@ -246,10 +246,10 @@ Public Sub ProcessMonthly510k()
             LogEvt "Refresh", lgERROR, "Data table not found on " & DATA_SHEET_NAME & " during skipped run check."
             mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "Data table not found during skipped run refresh check"
         Else
-            ' Use mod_DataIO for refresh during skipped run check
-            If Not mod_DataIO.RefreshPowerQuery(tblData) Then
-                LogEvt "Refresh", lgERROR, "PQ Refresh failed during skipped run check (via mod_DataIO)."
-                mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "PQ Refresh failed during skipped run check (mod_DataIO)"
+            ' Use mod_DataIO_Enhanced for refresh during skipped run check
+            If Not mod_DataIO_Enhanced.RefreshPowerQuery(tblData) Then
+                LogEvt "Refresh", lgERROR, "PQ Refresh failed during skipped run check (via mod_DataIO_Enhanced)."
+                mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "PQ Refresh failed during skipped run check (Enhanced)"
                  ' GoTo ProcessErrorHandler ' Option to make it critical
             End If
         End If
@@ -282,11 +282,15 @@ Public Sub ProcessMonthly510k()
         Application.StatusBar = "Refreshing FDA data from Power Query..."
         LogEvt "Refresh", lgINFO, "Attempting PQ refresh for table: " & tblData.Name
         mod_DebugTraceHelpers.TraceEvt lvlINFO, "ProcessMonthly510k", "Phase: Refresh Power Query Start", "Table=" & tblData.Name
-        ' Use mod_DataIO for main refresh
-        If Not mod_DataIO.RefreshPowerQuery(tblData) Then ' Includes post-refresh lock
-             LogEvt "Refresh", lgERROR, "PQ Refresh failed via mod_DataIO. Processing stopped."
-             mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "PQ Refresh Failed (mod_DataIO) - Halting Process"
-             GoTo ProcessErrorHandler ' Stop on critical PQ error
+        ' Use mod_DataIO_Enhanced for more reliable refresh
+        If Not mod_DataIO_Enhanced.RefreshPowerQuery(tblData) Then ' Timer-based refresh with retry
+             LogEvt "Refresh", lgERROR, "PQ Refresh failed via mod_DataIO_Enhanced. Processing stopped."
+             mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "PQ Refresh Failed (Enhanced) - Halting Process"
+             ' Set an appropriate error message to show to the user
+             errDesc = "Power Query refresh failed. Processing cannot continue without fresh data."
+             MsgBox errDesc, vbCritical, "Refresh Error - Processing Halted"
+             ' Exit process
+             GoTo CleanExit ' Changed from ProcessErrorHandler to CleanExit to ensure clean exit
         End If
         mod_DebugTraceHelpers.TraceEvt lvlINFO, "ProcessMonthly510k", "Phase: Refresh Power Query End"
     Else
