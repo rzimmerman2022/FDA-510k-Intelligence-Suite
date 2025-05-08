@@ -189,7 +189,7 @@ Public Sub ProcessMonthly510k()
                 On Error GoTo ProcessErrorHandler ' Restore handler
 
                 ' Check if the command text (often contains sheet name) targets our sheet
-                If cmdTextErr = 0 And InStr(1, sql, DATA_SHEET_NAME, vbTextCompare) > 0 Then
+                If cmdTextErr = 0 And InStr(1, sql, mod_Config.DATA_SHEET_NAME, vbTextCompare) > 0 Then
                     LogEvt "DataTable", lgWARN, _
                            "Table not found; attempting to recreate it by refreshing connection: " & pq.Name
                     mod_DebugTraceHelpers.TraceEvt lvlWARN, "ProcessMonthly510k", _
@@ -213,7 +213,7 @@ Public Sub ProcessMonthly510k()
 
     ' --- Final check if table exists after all attempts (with improved message) ---
     If tblData Is Nothing Then
-        Dim msg As String: msg = "No list-object found on '" & DATA_SHEET_NAME & _
+        Dim msg As String: msg = "No list-object found on '" & mod_Config.DATA_SHEET_NAME & _
                          "' and none could be recreated automatically via connection refresh."
         LogEvt "DataTable", lgERROR, msg
         mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", msg
@@ -227,7 +227,7 @@ Public Sub ProcessMonthly510k()
     startMonth = DateSerial(Year(DateAdd("m", -1, Date)), Month(DateAdd("m", -1, Date)), 1)
     targetMonthName = Format$(startMonth, "MMM-yyyy")
     archiveSheetName = targetMonthName
-    mustArchive = Not mod_DataIO.SheetExists(archiveSheetName) ' Use mod_DataIO
+    mustArchive = Not SheetExists(archiveSheetName) ' Remove mod_DataIO qualifier - function is accessible globally
     proceed = mustArchive Or Day(Date) <= 5 Or mod_Utils.IsMaintainerUser() ' Use mod_Utils
 
     LogEvt "ArchiveCheck", IIf(proceed, lgINFO, lgWARN), _
@@ -243,13 +243,13 @@ Public Sub ProcessMonthly510k()
         ' Attempt refresh even if skipping full process
         On Error Resume Next: Set tblData = wsData.ListObjects(1): On Error GoTo ProcessErrorHandler
         If tblData Is Nothing Then
-            LogEvt "Refresh", lgERROR, "Data table not found on " & DATA_SHEET_NAME & " during skipped run check."
+            LogEvt "Refresh", lgERROR, "Data table not found on " & mod_Config.DATA_SHEET_NAME & " during skipped run check."
             mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "Data table not found during skipped run refresh check"
         Else
-            ' Use mod_DataIO_Enhanced for refresh during skipped run check
-            If Not mod_DataIO_Enhanced.RefreshPowerQuery(tblData) Then
-                LogEvt "Refresh", lgERROR, "PQ Refresh failed during skipped run check (via mod_DataIO_Enhanced)."
-                mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "PQ Refresh failed during skipped run check (Enhanced)"
+        ' Use mod_DataIO for refresh during skipped run check
+        If Not mod_DataIO.RefreshPowerQuery(tblData) Then
+            LogEvt "Refresh", lgERROR, "PQ Refresh failed during skipped run check."
+            mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "PQ Refresh failed during skipped run check"
                  ' GoTo ProcessErrorHandler ' Option to make it critical
             End If
         End If
@@ -263,7 +263,7 @@ Public Sub ProcessMonthly510k()
         On Error Resume Next: Set tblData = wsData.ListObjects(1): On Error GoTo ProcessErrorHandler
     End If
     If tblData Is Nothing Then
-        LogEvt "DataTable", lgERROR, "Data table not found on " & DATA_SHEET_NAME
+        LogEvt "DataTable", lgERROR, "Data table not found on " & mod_Config.DATA_SHEET_NAME
         mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "Data table object lost or not found before refresh"
         GoTo ProcessErrorHandler
     End If
@@ -282,10 +282,10 @@ Public Sub ProcessMonthly510k()
         Application.StatusBar = "Refreshing FDA data from Power Query..."
         LogEvt "Refresh", lgINFO, "Attempting PQ refresh for table: " & tblData.Name
         mod_DebugTraceHelpers.TraceEvt lvlINFO, "ProcessMonthly510k", "Phase: Refresh Power Query Start", "Table=" & tblData.Name
-        ' Use mod_DataIO_Enhanced for more reliable refresh
-        If Not mod_DataIO_Enhanced.RefreshPowerQuery(tblData) Then ' Timer-based refresh with retry
-             LogEvt "Refresh", lgERROR, "PQ Refresh failed via mod_DataIO_Enhanced. Processing stopped."
-             mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "PQ Refresh Failed (Enhanced) - Halting Process"
+        ' Use mod_DataIO for more reliable refresh
+        If Not mod_DataIO.RefreshPowerQuery(tblData) Then ' Timer-based refresh with retry
+             LogEvt "Refresh", lgERROR, "PQ Refresh failed via mod_DataIO. Processing stopped."
+             mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "PQ Refresh Failed - Halting Process"
              ' Set an appropriate error message to show to the user
              errDesc = "Power Query refresh failed. Processing cannot continue without fresh data."
              MsgBox errDesc, vbCritical, "Refresh Error - Processing Halted"
