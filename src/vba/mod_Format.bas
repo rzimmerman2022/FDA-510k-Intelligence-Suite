@@ -58,7 +58,7 @@
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
-Attribute VB_Name = "mod_Format"
+
 
 Public Function AddScoreColumnsIfNeeded(tbl As ListObject) As Boolean
     ' Purpose: Adds the necessary scoring output columns to the table if they don't exist.
@@ -162,14 +162,12 @@ Public Function ApplyAll(tbl As ListObject, wsData As Worksheet) As Boolean
     Call SortDataTable(tbl)
     ' Call FreezeHeaderAndFirstColumns(wsData) ' Commented out as requested
 
-    ' --- Final Autofit after all changes ---
-    ' Removed On Error Resume Next to expose potential errors
-    LogEvt PROC_NAME, lgDETAIL, "Attempting final AutoFit..."
-    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Attempting final AutoFit" ' <<< STANDALONE DEBUG
-    tbl.Range.Columns.AutoFit
-    LogEvt PROC_NAME, lgDETAIL, "Final AutoFit completed."
-    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Final AutoFit completed" ' <<< STANDALONE DEBUG
-    ' On Error GoTo ApplyAllError ' Error handler already active
+    ' --- Final Autofit removed as it overrides specific widths set in FormatTableLook ---
+    ' LogEvt PROC_NAME, lgDETAIL, "Attempting final AutoFit..."
+    ' StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Attempting final AutoFit" ' <<< STANDALONE DEBUG
+    ' tbl.Range.Columns.AutoFit
+    ' LogEvt PROC_NAME, lgDETAIL, "Final AutoFit completed."
+    ' StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Final AutoFit completed" ' <<< STANDALONE DEBUG
 
     ApplyAll = True ' Success
     LogEvt PROC_NAME, lgINFO, "Formatting sequence completed successfully for table: " & tbl.Name
@@ -314,17 +312,33 @@ Private Sub FormatTableLook(tbl As ListObject)
     ' Set specific widths AFTER autofit
     On Error Resume Next ' Ignore errors if columns don't exist
     StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Attempting to set Applicant width" ' <<< STANDALONE DEBUG
-    tbl.ListColumns("Applicant").Range.ColumnWidth = 30
-    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Set Applicant Width", IIf(Err.Number <> 0, "ERROR: " & Err.Description, 30) ' <<< STANDALONE DEBUG
+    tbl.ListColumns("Applicant").Range.ColumnWidth = 25 ' Narrower width
+    If Err.Number = 0 Then tbl.ListColumns("Applicant").Range.EntireColumn.Hidden = False ' Attempt persistence
+    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Set Applicant Width", IIf(Err.Number <> 0, "ERROR: " & Err.Description, 25) ' <<< STANDALONE DEBUG
     Err.Clear ' Clear potential error before next step
 
     StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Attempting to set DeviceName width" ' <<< STANDALONE DEBUG
-    tbl.ListColumns("DeviceName").Range.ColumnWidth = 50
-    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Set DeviceName Width", IIf(Err.Number <> 0, "ERROR: " & Err.Description, 50) ' <<< STANDALONE DEBUG
+    tbl.ListColumns("DeviceName").Range.ColumnWidth = 40 ' Narrower width
+    If Err.Number = 0 Then tbl.ListColumns("DeviceName").Range.EntireColumn.Hidden = False ' Attempt persistence
+    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Set DeviceName Width", IIf(Err.Number <> 0, "ERROR: " & Err.Description, 40) ' <<< STANDALONE DEBUG
+    Err.Clear ' Clear potential error before next step
+
+    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Attempting to set CompanyRecap width" ' <<< STANDALONE DEBUG
+    tbl.ListColumns("CompanyRecap").Range.ColumnWidth = 40
+    If Err.Number = 0 Then tbl.ListColumns("CompanyRecap").Range.EntireColumn.Hidden = False ' Attempt persistence
+    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Set CompanyRecap Width", IIf(Err.Number <> 0, "ERROR: " & Err.Description, 40) ' <<< STANDALONE DEBUG
+    Err.Clear ' Clear potential error before next step
+
+    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Attempting to set Category width" ' <<< STANDALONE DEBUG
+    tbl.ListColumns("Category").Range.ColumnWidth = 15
+    If Err.Number = 0 Then tbl.ListColumns("Category").Range.EntireColumn.Hidden = False ' Attempt persistence
+    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Set Category Width", IIf(Err.Number <> 0, "ERROR: " & Err.Description, 15) ' <<< STANDALONE DEBUG
     Err.Clear ' Clear potential error
+
     ' Add others if needed
     On Error GoTo 0 ' Restore default error handling for the rest of the sub
 
+    ' Check for errors accumulated during width setting
     If Err.Number <> 0 Then
         LogEvt PROC_NAME, lgWARN, "Error applying table style/autofit: " & Err.Description, "Table=" & tbl.Name
         mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Error applying table style/autofit", "Table=" & tbl.Name & ", Err=" & Err.Description
@@ -336,63 +350,100 @@ Private Sub FormatTableLook(tbl As ListObject)
     On Error GoTo 0 ' Restore default
 End Sub
 
-Private Sub FormatCategoryColors(tbl As ListObject)
+Private Sub FormatCategoryColors(tblData As ListObject) ' Changed parameter name to tblData
     ' Purpose: Applies conditional formatting based on the 'Category' column.
     Const PROC_NAME As String = "mod_Format.FormatCategoryColors"
     Dim catCol As ListColumn, catRange As Range, cfRule As FormatCondition
+
     On Error GoTo FormatError
-    LogEvt PROC_NAME, lgDETAIL, "Applying category conditional formatting...", "Table=" & tbl.Name
-    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Start applying category colors", "Table=" & tbl.Name
-    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Entered FormatCategoryColors", tbl.Name ' <<< STANDALONE DEBUG
+    LogEvt PROC_NAME, lgDETAIL, "Entered FormatCategoryColors", "Table=" & tblData.Name
+    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Entered FormatCategoryColors", "Table=" & tblData.Name
+    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Entered FormatCategoryColors", tblData.Name ' <<< STANDALONE DEBUG
 
     On Error Resume Next ' Check if column exists
-    Set catCol = tbl.ListColumns("Category")
+    Set catCol = tblData.ListColumns("Category")
     On Error GoTo FormatError ' Restore handler
 
     If catCol Is Nothing Then
-        LogEvt PROC_NAME, lgWARN, "'Category' column not found. Skipping color formatting.", "Table=" & tbl.Name
-        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "'Category' column not found", "Table=" & tbl.Name
-        StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Category column NOT FOUND. Skipping.", tbl.Name ' <<< STANDALONE DEBUG
+        LogEvt PROC_NAME, lgWARN, "'Category' column not found. Skipping color formatting.", "Table=" & tblData.Name
+        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "'Category' column not found", "Table=" & tblData.Name
+        StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Category column NOT FOUND. Skipping.", tblData.Name ' <<< STANDALONE DEBUG
         Exit Sub ' Cannot apply formatting if the target column doesn't exist
     Else
-        LogEvt PROC_NAME, lgDETAIL, "'Category' column found. Proceeding with color formatting.", "Table=" & tbl.Name
-        mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "'Category' column found", "Table=" & tbl.Name
-        StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Category column FOUND. Proceeding.", tbl.Name ' <<< STANDALONE DEBUG
+        LogEvt PROC_NAME, lgDETAIL, "Category column FOUND. Proceeding.", "Table=" & tblData.Name
+        mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Category column FOUND", "Table=" & tblData.Name
+        StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Category column FOUND. Proceeding.", tblData.Name ' <<< STANDALONE DEBUG
     End If
 
     Set catRange = catCol.DataBodyRange
     catRange.FormatConditions.Delete ' Clear existing rules on this range
 
-    ' --- Define Category Colors (Consider moving to mod_Config) ---
-    Dim catColors As Object: Set catColors = CreateObject("Scripting.Dictionary")
-    catColors("A") = RGB(198, 239, 206) ' Green Fill
-    catColors("B") = RGB(255, 235, 156) ' Yellow Fill
-    catColors("C") = RGB(255, 199, 206) ' Red Fill
-    catColors("D") = RGB(217, 217, 217) ' Gray Fill
+    ' --- Define Category Colors and Apply Formatting ---
+    ' High - Green
+    Set cfRule = catRange.FormatConditions.Add(Type:=xlCellValue, Operator:=xlEqual, Formula1:="=""High""")
+    With cfRule.Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = RGB(198, 239, 206) ' Light green
+        .TintAndShade = 0
+    End With
+    cfRule.Font.Bold = True
+    cfRule.Font.Color = RGB(0, 97, 0) ' Dark green text for contrast
+    cfRule.StopIfTrue = False
 
-    Dim catKey As Variant
-    For Each catKey In catColors.Keys
-        Set cfRule = catRange.FormatConditions.Add(Type:=xlCellValue, Operator:=xlEqual, Formula1:="=""" & catKey & """")
-        With cfRule.Interior
-            .PatternColorIndex = xlAutomatic
-            .Color = catColors(catKey)
-            .TintAndShade = 0
-        End With
-        ' Set font color based on background brightness (Requires GetBrightness from mod_Utils)
-        If mod_Utils.GetBrightness(catColors(catKey)) < 0.5 Then ' Dark background
-            cfRule.Font.Color = vbWhite
-        Else ' Light background
-            cfRule.Font.Color = vbBlack
-        End If
-        cfRule.StopIfTrue = False ' Apply multiple rules if needed (though unlikely here)
-    Next catKey
+    ' Moderate - Yellow
+    Set cfRule = catRange.FormatConditions.Add(Type:=xlCellValue, Operator:=xlEqual, Formula1:="=""Moderate""")
+    With cfRule.Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = RGB(255, 235, 156) ' Light yellow
+        .TintAndShade = 0
+    End With
+    cfRule.Font.Bold = True
+    cfRule.Font.Color = RGB(156, 101, 0) ' Dark gold/brown text
+    cfRule.StopIfTrue = False
 
-    LogEvt PROC_NAME, lgDETAIL, "Category conditional formatting applied.", "Table=" & tbl.Name
-    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Category colors applied", "Table=" & tbl.Name
+    ' Low - Light Orange
+    Set cfRule = catRange.FormatConditions.Add(Type:=xlCellValue, Operator:=xlEqual, Formula1:="=""Low""")
+    With cfRule.Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = RGB(255, 221, 179) ' Light orange
+        .TintAndShade = 0
+    End With
+    cfRule.Font.Bold = True
+    cfRule.Font.Color = RGB(156, 87, 0) ' Dark orange/brown text
+    cfRule.StopIfTrue = False
+
+    ' Almost None - Gray
+    Set cfRule = catRange.FormatConditions.Add(Type:=xlCellValue, Operator:=xlEqual, Formula1:="=""Almost None""")
+    With cfRule.Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = RGB(242, 242, 242) ' Light gray
+        .TintAndShade = 0
+    End With
+    cfRule.Font.Bold = True
+    cfRule.Font.Color = RGB(89, 89, 89) ' Dark gray text
+    cfRule.StopIfTrue = False
+
+    ' Error - Red
+    Set cfRule = catRange.FormatConditions.Add(Type:=xlCellValue, Operator:=xlEqual, Formula1:="=""Error""")
+    With cfRule.Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = RGB(255, 199, 206) ' Light red
+        .TintAndShade = 0
+    End With
+    cfRule.Font.Bold = True
+    cfRule.Font.Color = RGB(156, 0, 6) ' Dark red text
+    cfRule.StopIfTrue = False
+
+    LogEvt PROC_NAME, lgDETAIL, "Category conditional formatting applied successfully.", "Table=" & tblData.Name
+    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Category formatting applied", "Table=" & tblData.Name
+    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Category formatting applied", tblData.Name ' <<< STANDALONE DEBUG
     Exit Sub
+
 FormatError:
-    LogEvt PROC_NAME, lgERROR, "Error applying category conditional formatting: " & Err.Description, "Table=" & tbl.Name
-    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error applying category colors", "Table=" & tbl.Name & ", Err=" & Err.Number & " - " & Err.Description
+    LogEvt PROC_NAME, lgERROR, "Error applying category conditional formatting: " & Err.Description, "Table=" & tblData.Name
+    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error applying category formatting", "Table=" & tblData.Name & ", Err=" & Err.Number & " - " & Err.Description
+    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "ERROR in FormatCategoryColors", "Err=" & Err.Number & " - " & Err.Description ' <<< STANDALONE DEBUG
+    Debug.Print Time & " - ERROR in " & PROC_NAME & ": " & Err.Description
 End Sub
 
 Private Sub CreateShortNamesAndComments(tbl As ListObject)
@@ -425,13 +476,15 @@ Private Sub ReorganizeColumns(tbl As ListObject)
     Dim desiredOrder As Variant, currentPos As Long, targetPos As Long, colName As Variant, lc As ListColumn
     ' --- Define Desired Order (Consider moving to mod_Config) ---
     ' Updated order based on user feedback 2025-04-30 (Task: Fix formatting issues)
+    ' Moved City and State to the end
     desiredOrder = Array( _
-        "K_Number", "DecisionDate", "Applicant", "DeviceName", "Contact", "City", "State", "CompanyRecap", _
-        "Score_Percent", "Category", "FDA_Link", _
+        "K_Number", "DecisionDate", "Applicant", "DeviceName", "Contact", _
+        "CompanyRecap", "Score_Percent", "Category", "FDA_Link", _
         "Final_Score", "DateReceived", "ProcTimeDays", "AC", "PC", "SubmType", "Country", "Statement", _
-        "AC_Wt", "PC_Wt", "KW_Wt", "ST_Wt", "PT_Wt", "GL_Wt", "NF_Calc", "Synergy_Calc" _
+        "AC_Wt", "PC_Wt", "KW_Wt", "ST_Wt", "PT_Wt", "GL_Wt", "NF_Calc", "Synergy_Calc", _
+        "City", "State" _
     )
-    ' Note: Any columns *not* listed here will end up at the far right.
+    ' Note: Any columns *not* listed here will end up even further to the right.
 
     On Error GoTo ReorgError
     LogEvt PROC_NAME, lgDETAIL, "Reorganizing columns...", "Table=" & tbl.Name
@@ -509,7 +562,7 @@ Private Sub SortDataTable(tbl As ListObject)
 
     With tbl.Sort
         .SortFields.Clear
-        .SortFields.Add Key:=sortCol, SortOn:=xlSortOnValues, Order:=SORT_ORDER, DataOption:=xlSortNormal
+        .SortFields.Add key:=sortCol, SortOn:=xlSortOnValues, Order:=SORT_ORDER, DataOption:=xlSortNormal
         ' Add secondary sort keys if needed:
         ' .SortFields.Add Key:=tbl.ListColumns("SecondaryColumn").Range, SortOn:=xlSortOnValues, Order:=xlAscending
         .Header = xlYes
@@ -572,6 +625,60 @@ Private Function ColumnExists(tbl As ListObject, colName As String) As Boolean
     Set lc = Nothing
 End Function
 
+
+' ==========================================================================
+' ===                  PUBLIC UTILITY FUNCTIONS                        ===
+' ==========================================================================
+
+Public Sub RestoreTableFormatting()
+    ' Purpose: Manually restores all standard formatting to the main data table.
+    Const PROC_NAME As String = "mod_Format.RestoreTableFormatting"
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    Dim wsData As Worksheet ' Needed for ApplyAll call
+
+    On Error GoTo RestoreError
+
+    ' --- Get the main data sheet and table ---
+    On Error Resume Next ' Handle sheet/table not found
+    Set wsData = ThisWorkbook.Sheets(mod_Config.DATA_SHEET_NAME) ' Use config constant (Corrected name)
+    If wsData Is Nothing Then
+        MsgBox "Could not find the main data sheet: '" & mod_Config.DATA_SHEET_NAME & "'", vbCritical, "Restore Formatting Error" ' Corrected name
+        Exit Sub
+    End If
+    Set tbl = wsData.ListObjects(1) ' Assumes first table on the sheet
+    On Error GoTo RestoreError ' Restore handler
+
+    If Not tbl Is Nothing Then
+        LogEvt PROC_NAME, lgINFO, "Starting manual formatting restoration...", "Table=" & tbl.Name
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Start manual formatting restoration", "Table=" & tbl.Name
+
+        ' --- Apply standard formatting sequence ---
+        ' Note: ApplyAll handles its own internal logging and error handling
+        If ApplyAll(tbl, wsData) Then
+            LogEvt PROC_NAME, lgINFO, "Table formatting restoration completed successfully.", "Table=" & tbl.Name
+            mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Manual formatting restoration complete", "Table=" & tbl.Name
+            MsgBox "Table formatting has been restored successfully.", vbInformation, "Restore Complete"
+        Else
+            ' ApplyAll already showed an error message, just log it here
+            LogEvt PROC_NAME, lgWARN, "Manual formatting restoration failed. See previous logs/messages.", "Table=" & tbl.Name
+            mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Manual formatting restoration failed", "Table=" & tbl.Name
+            ' No additional MsgBox needed here as ApplyAll handles it
+        End If
+    Else
+        LogEvt PROC_NAME, lgERROR, "Could not find the main table on sheet '" & wsData.Name & "' to restore formatting."
+        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Could not find table to restore", "Sheet=" & wsData.Name
+        MsgBox "Could not find the main table on sheet '" & wsData.Name & "' to restore formatting.", vbExclamation, "Restore Formatting Error"
+    End If
+
+    Exit Sub
+
+RestoreError:
+    LogEvt PROC_NAME, lgERROR, "An unexpected error occurred during formatting restoration: " & Err.Description
+    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Unexpected error during restoration", "Err=" & Err.Number & " - " & Err.Description
+    MsgBox "An unexpected error occurred during formatting restoration: " & vbCrLf & Err.Description, vbCritical, "Restore Formatting Error"
+End Sub
+
 ' --- Helper function to get column index (Added for logging) ---
 Private Function GetColumnIndex(tbl As ListObject, colName As String) As Long
     Dim lc As ListColumn
@@ -585,3 +692,5 @@ Private Function GetColumnIndex(tbl As ListObject, colName As String) As Long
     On Error GoTo 0
     Set lc = Nothing
 End Function
+
+

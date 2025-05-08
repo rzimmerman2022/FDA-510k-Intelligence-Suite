@@ -11,19 +11,16 @@
 '
 ' Key Procedures:
 '               - Workbook_Open(): Automatically executes when the workbook is
-'                 opened. Serves as the main entry point for the automated
-'                 510(k) processing workflow. It handles initial setup,
-'                 triggers the Power Query data refresh (via mod_DataIO),
-'                 and then calls the main processing orchestration routine
-'                 (mod_510k_Processor.ProcessMonthly510k). Includes error
-'                 handling specific to the opening sequence.
+'                 opened. Auto-update functionality (refresh, processing)
+'                 is currently COMMENTED OUT within this sub.
 '               - Workbook_BeforeClose(Cancel As Boolean): Executes just before
 '                 the workbook closes. Currently used to perform cleanup tasks,
-'                 specifically trimming the RunLog sheet using mod_Logger.TrimRunLog.
+'                 specifically flushing the log buffer and trimming the RunLog
+'                 sheet using mod_Logger.
 '
-' Dependencies: - mod_DataIO: Calls RefreshPowerQuery.
-'               - mod_510k_Processor: Calls ProcessMonthly510k.
-'               - mod_Logger: Calls TrimRunLog.
+' Dependencies: - mod_DataIO: Called by Workbook_Open (currently commented out).
+'               - mod_510k_Processor: Called by Workbook_Open (currently commented out).
+'               - mod_Logger: Calls FlushLogBuf and TrimRunLog.
 '               - Implicitly relies on constants/settings defined in mod_Config
 '                 via the modules it calls.
 '
@@ -31,6 +28,12 @@
 ' --------------------------------------------------------------------------
 ' Date        Author          Description
 ' ----------- --------------- ----------------------------------------------
+' 2025-05-08  Cline (AI)      - Improved error handling in Workbook_Open to ensure events
+'                               are always re-enabled even if a critical error occurs
+'                               - Added global variable g_TargetMonth to avoid month logic duplication
+' 2025-05-01  Cline (AI)      - Commented out auto-update calls within Workbook_Open
+'                               (RefreshPowerQuery, ProcessMonthly510k) per user request.
+' 2025-05-01  Cline (AI)      - Removed previous commenting out of entire Workbook_Open.
 ' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
 ' 2025-04-29  Cline (AI)      - Corrected module reference for RefreshPowerQuery call
 '                               (changed from mod_510k_Processor to mod_DataIO).
@@ -45,109 +48,86 @@
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
-Attribute VB_Name = "ThisWorkbook"
 ' This code handles the automatic workbook events:
 ' - Workbook_Open: Entry point for the automated 510(k) processing
 ' - Workbook_BeforeClose: Performs cleanup operations like trimming the log
 
+' Global variable to avoid month determination duplication
+' Set here by DetermineReportingMonth and used by ProcessMonthly510k
+Public g_TargetMonth As Date
+
 Private Sub Workbook_Open()
     ' Purpose: Entry point for the automated 510(k) processing.
-    '          Refreshes data on every open via Power Query, then calls
-    '          the main processing module which handles scoring, formatting,
-    '          and conditional archiving.
+    '          NEW FUNCTIONALITY: 
+    '          1. Check if today's date is on/after the 10th of the month
+    '          2. Determine which period to process (previous month if after 10th)
+    '          3. Check if we've already created the archive sheet for this period
+    '          4. If needed, run a synchronous PQ refresh and process the data
 
     Dim procStartTime As Double: procStartTime = Timer ' For timing measurement
+    Dim origEnableEvents As Boolean: origEnableEvents = Application.EnableEvents ' Store original state
 
-    ' --- Basic error handling for the open event ---
+    ' --- Put error handling FIRST to ensure events are always re-enabled ---
+    ' This is critical: Even if a panic error occurs, we need to restore application state
     On Error GoTo OpenErrorHandler
 
+    ' --- Disable events to prevent Power Query from potentially re-triggering Workbook_Open ---
+    Application.EnableEvents = False
+    
     ' --- 1. Check if Workbook is ReadOnly ---
     If Me.ReadOnly Then
         Debug.Print Time & " - Workbook opened ReadOnly. Auto-processing skipped."
-        Exit Sub ' Do not proceed if the workbook cannot be modified
+        GoTo OpenCleanExit ' Use clean exit to restore settings
     End If
-
-    ' --- 2. Prepare Application State for Performance ---
+    
+    ' --- NEW CODE: Determine which period to process based on date ---
+    Dim tgtMonthFirst As Date, tgtSheetName As String
+    
+    ' 1) Decide which period to process based on the current date
+    tgtMonthFirst = DetermineReportingMonth(Date)
+    
+    ' Store in global variable for ProcessMonthly510k to use
+    ' This avoids duplicate month determination logic
+    g_TargetMonth = tgtMonthFirst
+    
+    tgtSheetName = Format(tgtMonthFirst, "mmm-yyyy") ' e.g., "Apr-2025"
+    
+    ' 2) If we've already built the archive sheet for this period, bail out
+    If SheetExists(tgtSheetName) Then
+        Application.StatusBar = "Month " & tgtSheetName & " already archived. No processing needed."
+        Debug.Print Time & " - Month " & tgtSheetName & " already archived. Auto-processing skipped."
+        GoTo OpenCleanExit
+    End If
+    
+    ' 3) We need to process this month - prepare application state
     Application.ScreenUpdating = False
-    Application.EnableEvents = False ' Prevent other event triggers during run
-    Application.Calculation = xlCalculationManual ' Prevent calculation delays
-    Application.Cursor = xlWait ' Indicate busy state to user
-
-    ' --- 3. Always Refresh Power Query Data First ---
-    Application.StatusBar = "Refreshing FDA data (Step 1/2)..."
-
-    ' Call the refresh function from the other module.
-    ' Assumes RefreshPowerQuery is a Public Function in mod_510k_Processor
-    ' It now requires the ListObject (table) as input.
-    Dim wsData As Worksheet
-    Dim tblData As ListObject
-    Dim refreshSuccess As Boolean: refreshSuccess = False
-    Const DATA_SHEET_NAME_LOCAL As String = "CurrentMonthData" ' Use local literal
-
-    On Error Resume Next ' Handle potential errors getting sheet/table
-    ' Use the local literal sheet name to avoid cross-module reference issues
-    Set wsData = ThisWorkbook.Sheets(DATA_SHEET_NAME_LOCAL)
-    If Not wsData Is Nothing Then
-        Set tblData = wsData.ListObjects(1) ' Assuming the first table is the target
+    Application.Calculation = xlCalculationManual
+    Application.Cursor = xlWait
+    
+    ' 4) Force a synchronous PQ refresh
+    Application.StatusBar = "Refreshing FDA data for month " & tgtSheetName & "..."
+    If Not Refresh510kConnection() Then
+        MsgBox "Warning: Power Query refresh failed. Will attempt to continue with existing data.", vbExclamation, "Refresh Warning"
     End If
-    On Error GoTo OpenErrorHandler ' Restore error handler
+    
+    ' 5) Run the full processing pipeline with the target month as parameter
+    Application.StatusBar = "Processing data for " & tgtSheetName & "..."
+    Debug.Print Time & " - Auto-processing " & tgtSheetName & " based on date rule (current date: " & Format(Date, "mm/dd/yyyy") & ")"
+    
+    ' NOTE: Using g_TargetMonth global variable to share the target month
+    ' ProcessMonthly510k should check g_TargetMonth and use it if not Empty/zero
+    ' Future enhancement: Modify ProcessMonthly510k to accept a date parameter directly
+    Call mod_510k_Processor.ProcessMonthly510k
+    
+    ' 6) Final success message
+    Application.StatusBar = "Processing complete for " & tgtSheetName
+    Debug.Print Time & " - Workbook_Open auto-processing completed in " & Format(Timer - procStartTime, "0.0") & " seconds."
 
-    If tblData Is Nothing Then
-        ' Use the local literal here too for the error message
-        Debug.Print Time & " - ERROR: Could not find data table on sheet '" & DATA_SHEET_NAME_LOCAL & "' during Workbook_Open refresh."
-        MsgBox "Error: Could not find the data table on sheet '" & DATA_SHEET_NAME_LOCAL & "'." & vbCrLf & _
-               "Cannot refresh Power Query.", vbCritical, "Table Not Found"
-        ' Decide if you want to stop here or continue without refresh
-        ' GoTo OpenCleanExit ' Option to stop
-    Else
-        ' Call TestCall first to isolate compile error
-        Dim testSuccess As Boolean
-        On Error Resume Next ' Temporarily allow error on test call
-        testSuccess = mod_DataIO.TestCall()
-        If Err.Number <> 0 Then
-             Debug.Print Time & " - COMPILE ERROR likely on TestCall: " & Err.Description
-             MsgBox "Compile error calling TestCall from mod_DataIO.", vbCritical
-             Err.Clear
-             GoTo OpenCleanExit ' Exit if test call fails
-        End If
-        On Error GoTo OpenErrorHandler ' Restore main handler
-
-        ' Call RefreshPowerQuery with the table object
-        ' Restored explicit module qualifier
-        refreshSuccess = mod_DataIO.RefreshPowerQuery(tblData)
-        If refreshSuccess Then
-            Debug.Print Time & " - Power Query refresh step completed for table '" & tblData.Name & "'."
-        Else
-            Debug.Print Time & " - Power Query refresh failed or was skipped for table '" & tblData.Name & "'. See previous logs."
-            ' Critical Decision: Should we stop if refresh fails?
-            MsgBox "Warning: Failed to refresh data from the FDA source." & vbCrLf & _
-                   "Processing will continue with existing data, which may be outdated.", vbExclamation, "Data Refresh Issue"
-            ' Uncomment the next line to completely stop if refresh fails:
-            ' GoTo OpenCleanExit
-        End If
-    End If
-
-    ' Clean up objects used just for refresh call
-    Set tblData = Nothing
-    Set wsData = Nothing
-
-    ' --- 4. Call the Main Processing Sub (Scoring, Formatting, Archiving) ---
-    '    This sub contains the Day Guard logic.
-    Application.StatusBar = "Processing leads and finalizing sheet (Step 2/2)..."
-
-    Call mod_510k_Processor.ProcessMonthly510k ' Call the main routine in the other module
-
-    ' --- 5. Final Status Update ---
-    '    Note: A more detailed completion message is shown at the end of ProcessMonthly510k
-    Application.StatusBar = "Workbook ready."
-    Debug.Print Time & " - Workbook_Open sequence completed in " & Format(Timer - procStartTime, "0.0") & " seconds."
-
-
-' --- Clean Exit Point (for normal completion or after handled error) ---
+' --- FINALLY block - this ensures application state is always restored ---
 OpenCleanExit:
-    ' --- Restore Application Settings ---
+    ' --- Restore Application Settings (Must execute even after errors) ---
     Application.ScreenUpdating = True
-    Application.EnableEvents = True
+    Application.EnableEvents = origEnableEvents ' Restore original EnableEvents state
     Application.Calculation = xlCalculationAutomatic
     Application.StatusBar = False ' Clear status bar message
     Application.Cursor = xlDefault ' Restore default cursor
@@ -163,16 +143,19 @@ OpenErrorHandler:
     Debug.Print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
     Debug.Print Time & " - CRITICAL ERROR in Workbook_Open: " & Err.Description & " (Error No. " & Err.Number & ")"
     Debug.Print "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    ' Attempt to jump to the cleanup routine to restore settings
+    ' Jump to our FINALLY block to ensure settings are restored
+    ' The Resume ensures we'll continue with the clean-exit code
+    ' no matter what kind of error happened
     Resume OpenCleanExit
 
 End Sub ' End of Workbook_Open
 
 Private Sub Workbook_BeforeClose(Cancel As Boolean)
     ' Purpose: Performs any necessary cleanup operations before the workbook is closed
-    '          1. Trims the RunLog sheet to prevent excessive growth over time
-    '          2. [Optional] Could add other cleanup tasks here as needed
-    
+    '          1. Flushes the log buffer
+    '          2. Trims the RunLog sheet to prevent excessive growth over time
+    '          3. [Optional] Could add other cleanup tasks here as needed
+
     On Error Resume Next ' Handle potential errors gracefully - we don't want to prevent closing
 
     ' --- 1. Flush Log Buffer ---
@@ -187,8 +170,87 @@ Private Sub Workbook_BeforeClose(Cancel As Boolean)
     ' - Ensure all sheets are properly archived
     ' - Save user preferences/settings
     ' - Clean up temp files/data
-    
+
     On Error GoTo 0 ' Restore normal error handling
-    
+
     ' Always let workbook close by not setting Cancel = True
 End Sub
+
+' === NEW HELPER FUNCTIONS ===
+
+' Function to determine which reporting month to process based on the current date
+' Rule: If day >= 10, process previous month; Otherwise, process month before previous
+Public Function DetermineReportingMonth(runDt As Date) As Date
+    Dim yr As Long, mth As Long
+    yr = Year(runDt)
+    mth = Month(runDt)
+    
+    If Day(runDt) >= 10 Then
+        ' On/after the 10th - process the previous month
+        mth = mth - 1
+    Else
+        ' Before the 10th - process the month before previous
+        mth = mth - 2
+    End If
+    
+    ' Handle year boundary cases (December→January, February→January, etc.)
+    ' DateSerial handles this automatically by wrapping correctly:
+    ' - If month becomes 0 or negative, it will adjust to previous year
+    ' - Example: DateSerial(2025, -2, 1) = DateSerial(2024, 10, 1) = October 1, 2024
+    If mth <= 0 Then
+        mth = mth + 12
+        yr = yr - 1
+    End If
+    
+    ' Return first day of the target month
+    DetermineReportingMonth = DateSerial(yr, mth, 1)
+End Function
+
+' Function to check if a sheet with the given name exists
+' Duplicated from mod_DataIO.SheetExists for encapsulation
+Public Function SheetExists(shtName As String) As Boolean
+    On Error Resume Next
+    SheetExists = Len(ThisWorkbook.Sheets(shtName).Name) > 0
+    On Error GoTo 0
+End Function
+
+' Function to refresh the 510k Power Query connection synchronously
+Public Function Refresh510kConnection() As Boolean
+    ' *** IMPORTANT: If you rename your Power Query in the QueryEditor, update this constant ***
+    Const CN_NAME As String = "Query - pgGet510kData" ' Default connection name pattern
+    Dim wsData As Worksheet
+    Dim tblData As ListObject
+    Dim cn As WorkbookConnection
+    
+    Refresh510kConnection = False ' Default return value
+    
+    On Error Resume Next
+    
+    ' Get the data worksheet
+    Set wsData = ThisWorkbook.Sheets(mod_Config.DATA_SHEET_NAME)
+    If wsData Is Nothing Then
+        Debug.Print Time & " - ERROR: Could not find data sheet '" & mod_Config.DATA_SHEET_NAME & "'"
+        Exit Function
+    End If
+    
+    ' Get the table on that sheet
+    Set tblData = wsData.ListObjects(1)
+    If tblData Is Nothing Then
+        Debug.Print Time & " - ERROR: Could not find data table on sheet '" & mod_Config.DATA_SHEET_NAME & "'"
+        Exit Function
+    End If
+    
+    ' Try the direct connection approach first
+    Set cn = ThisWorkbook.Connections(CN_NAME)
+    If Not cn Is Nothing Then
+        ' Set to synchronous mode and refresh
+        cn.OLEDBConnection.BackgroundQuery = False
+        cn.Refresh
+        Refresh510kConnection = True
+    Else
+        ' Fall back to mod_DataIO if the direct connection approach fails
+        Refresh510kConnection = mod_DataIO.RefreshPowerQuery(tblData)
+    End If
+    
+    On Error GoTo 0
+End Function

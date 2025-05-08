@@ -25,8 +25,8 @@ let
     // --- Fetch and Process Data ---
     // Attempt to fetch data from the constructed API URL
     // Use 'try...otherwise null' to gracefully handle potential errors (network issues, API downtime, invalid response)
-    // Set a reasonable timeout (e.g., 60 seconds = #duration(0, 0, 1, 0))
-    Source = try Json.Document(Web.Contents(DynamicApiUrl, [Timeout=#duration(0, 0, 1, 0)])) otherwise null,
+    // Set a longer timeout (e.g., 300 seconds = 5 minutes = #duration(0, 0, 5, 0))
+    Source = try Json.Document(Web.Contents(DynamicApiUrl, [Timeout=#duration(0, 0, 5, 0)])) otherwise null,
 
     // Check if the API call was successful (Source is not null) and if the response contains the expected 'results' field
     // If not, provide an empty list to prevent downstream errors

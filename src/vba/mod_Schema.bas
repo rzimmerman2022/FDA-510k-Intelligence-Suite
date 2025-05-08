@@ -47,7 +47,6 @@
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
-Attribute VB_Name = "mod_Schema"
 
 Public Function GetColumnIndices(headerRange As Range) As Object ' Scripting.Dictionary or Nothing
     ' Purpose: Creates a dictionary mapping column header names (handling duplicates) to their 1-based index.
@@ -60,7 +59,8 @@ Public Function GetColumnIndices(headerRange As Range) As Object ' Scripting.Dic
     colNum = 1
 
     Dim requiredBaseCols As Variant ' Base names of columns that MUST exist
-    requiredBaseCols = Array("K_Number", "Applicant", "DeviceName", "DecisionDate", "DateReceived", "ProcTimeDays", "AC", "PC", "SubmType", "Country", "Statement", "FDA_Link")
+    ' Include both versions of column names to support different possible Power Query outputs
+    requiredBaseCols = Array("K_Number", "Applicant", "DeviceName", "Device_Name", "DecisionDate", "Decision Date", "DateReceived", "Date Received", "ProcTimeDays", "Proc Time Days", "AC", "PC", "SubmType", "Country", "Statement", "FDA_Link")
     ' Output columns are also required, added by AddScoreColumnsIfNeeded, listed here for check completeness
     Dim requiredOutputCols As Variant
     requiredOutputCols = Array("AC_Wt", "PC_Wt", "KW_Wt", "ST_Wt", "PT_Wt", "GL_Wt", "NF_Calc", "Synergy_Calc", "Final_Score", "Score_Percent", "Category", "CompanyRecap")
@@ -68,7 +68,7 @@ Public Function GetColumnIndices(headerRange As Range) As Object ' Scripting.Dic
     mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Mapping header range", "Range=" & headerRange.Address(External:=True)
 
     For Each cell In headerRange.Cells
-        h = Trim(cell.Value)
+        h = Trim(cell.value)
         If Len(h) > 0 Then
             Dim dictKey As String
             ' --- Handle potential duplicate header names ---
@@ -162,14 +162,14 @@ Public Function ConcatArrays(arr1 As Variant, arr2 As Variant) As Variant
     ConcatArrays = tempArr
 End Function
 
-Public Function SafeGetString(arr As Variant, r As Long, ByVal cols As Object, baseColName As String) As String
+Public Function SafeGetString(arr As Variant, R As Long, ByVal cols As Object, baseColName As String) As String
     ' Purpose: Safely gets a string value from the data array using the column map, handling missing/duplicate columns.
     Dim colIdx As Long
     colIdx = SafeGetColIndex(cols, baseColName) ' Find the correct index
 
     If colIdx > 0 Then
         On Error Resume Next ' Handle error reading specific array element
-        SafeGetString = Trim(CStr(arr(r, colIdx)))
+        SafeGetString = Trim(CStr(arr(R, colIdx)))
         If Err.Number <> 0 Then SafeGetString = "": Err.Clear ' Return blank on error
         On Error GoTo 0
     Else
@@ -177,14 +177,14 @@ Public Function SafeGetString(arr As Variant, r As Long, ByVal cols As Object, b
     End If
 End Function
 
-Public Function SafeGetVariant(arr As Variant, r As Long, ByVal cols As Object, baseColName As String) As Variant
+Public Function SafeGetVariant(arr As Variant, R As Long, ByVal cols As Object, baseColName As String) As Variant
     ' Purpose: Safely gets a variant value from the data array using the column map.
     Dim colIdx As Long
     colIdx = SafeGetColIndex(cols, baseColName)
 
     If colIdx > 0 Then
         On Error Resume Next ' Handle error reading specific array element
-        SafeGetVariant = arr(r, colIdx)
+        SafeGetVariant = arr(R, colIdx)
         If Err.Number <> 0 Then SafeGetVariant = Null: Err.Clear ' Return Null on error (or CVErr?)
         On Error GoTo 0
     Else

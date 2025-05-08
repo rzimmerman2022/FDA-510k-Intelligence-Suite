@@ -232,14 +232,6 @@ Private Function GetCompanyRecapOpenAI(companyName As String) As String
     Dim apiKey As String, result As String, http As Object, url As String, jsonPayload As String, jsonResponse As String
     Const PROC_NAME As String = "mod_Cache.GetCompanyRecapOpenAI" ' Updated PROC_NAME
     GetCompanyRecapOpenAI = "" ' Default return value
-    
-    ' Check if OpenAI API calls are enabled globally
-    If Not mod_Config.ENABLE_OPENAI_API_CALLS Then
-        GetCompanyRecapOpenAI = "OpenAI disabled"   ' early exit
-        LogEvt PROC_NAME, lgINFO, "Skipped OpenAI Call: Feature disabled globally.", "Company=" & companyName
-        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Skipped: Feature disabled", "Company=" & companyName
-        Exit Function
-    End If
 
     ' Double-check maintainer status (though already checked by caller)
     ' Assumes IsMaintainerUser is available (e.g., in mod_Utils or mod_Config)

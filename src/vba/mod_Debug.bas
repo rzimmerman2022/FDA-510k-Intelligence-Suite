@@ -38,7 +38,6 @@
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
-Attribute VB_Name = "mod_Debug"
 
 Sub DumpHeaders()
     ' Purpose: Prints the column order and names of the first table on the active sheet to the Immediate Window.
@@ -67,7 +66,7 @@ Sub DumpHeaders()
     End If
 
     For Each c In lo.HeaderRowRange.Cells
-        Debug.Print "Col " & c.Column & ": ", c.Value
+        Debug.Print "Col " & c.Column & ": ", c.value
     Next c
     Debug.Print "========================================="
 

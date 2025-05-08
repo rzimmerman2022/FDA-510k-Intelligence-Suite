@@ -50,7 +50,6 @@
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
-Attribute VB_Name = "mod_Score"
 
 ' --- Module-Level Object for Regular Expressions (Late Binding) ---
 ' Moved here as CheckKeywords uses it
@@ -101,8 +100,9 @@ Public Function Calculate510kScore(dataArr As Variant, rowIdx As Long, ByVal col
     ST_Wt = GetWeightFromDict(mod_Weights.GetSTWeights(), SubmType, DEFAULT_ST_WEIGHT)
 
     ' Processing Time Weight
-    If IsNumeric(ProcTimeDays) Then
-        Select Case CDbl(ProcTimeDays)
+    ProcTimeDays = Val(ProcTimeDays)   'converts "123", "123.4", "123 days" to 123
+    If ProcTimeDays > 0 Then
+        Select Case ProcTimeDays
             Case Is > 172: PT_Wt = 0.65
             Case 162 To 172: PT_Wt = 0.6
             Case Else: PT_Wt = DEFAULT_PT_WEIGHT ' Includes < 162 and non-positive/invalid

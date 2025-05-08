@@ -45,7 +45,6 @@
 ' [Previous dates/authors/changes unknown]
 ' ==========================================================================
 Option Explicit
-Attribute VB_Name = "mod_Weights"
 
 ' Module-level variables to hold the loaded data (kept Private)
 Private dictACWeights As Object       ' Scripting.Dictionary: Key=AC Code, Value=Weight
