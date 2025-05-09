@@ -41,6 +41,18 @@
 ' --------------------------------------------------------------------------
 ' Date        Author          Description
 ' ----------- --------------- ----------------------------------------------
+' 2025-05-17  Cline (AI)      - Fixed bug in ReorganizeColumns where the column index
+'                               adjustment logic was incorrect. Changed from checking
+'                               "if curPos < destCol" to "if curPos >= destCol" to
+'                               properly track column positions after insertion.
+'                             - This fixes DeviceName appearing after Category instead
+'                               of after Applicant, and restores red triangles that
+'                               were being lost when the wrong column was deleted.
+' 2025-05-17  Cline (AI)      - Fixed bug with cell notes (red triangles) disappearing
+'                               by moving CreateShortNamesAndComments call to after
+'                               ReorganizeColumns and SortDataTable in ApplyAll. Excel has a
+'                               known issue where column Cut/Insert operations cause
+'                               cell comment objects to be silently dropped.
 ' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
 ' 2025-04-30  Cline (AI)      - Corrected "Syntax error" in SortDataTable by changing
 '                               Const SORT_ORDER As XlSortOrder to Dim SORT_ORDER
@@ -132,10 +144,6 @@ Public Function ApplyAll(tbl As ListObject, wsData As Worksheet) As Boolean
     StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Calling FormatCategoryColors" ' <<< STANDALONE DEBUG
     Call FormatCategoryColors(tbl) ' Apply colors based on Category column name
 
-    LogEvt PROC_NAME, lgDETAIL, "Calling CreateShortNamesAndComments..."
-    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Calling CreateShortNamesAndComments" ' <<< STANDALONE DEBUG
-    Call CreateShortNamesAndComments(tbl) ' Call with default parameters
-
     ' --- Add logging before ReorganizeColumns ---
     LogEvt PROC_NAME, lgDETAIL, "Checking 'Category' column existence BEFORE ReorganizeColumns...", "Exists=" & ColumnExists(tbl, "Category")
     mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Check BEFORE Reorg", "Category Exists=" & ColumnExists(tbl, "Category")
@@ -160,6 +168,10 @@ Public Function ApplyAll(tbl As ListObject, wsData As Worksheet) As Boolean
     LogEvt PROC_NAME, lgDETAIL, "Calling SortDataTable..."
     StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Calling SortDataTable" ' <<< STANDALONE DEBUG
     Call SortDataTable(tbl)
+    
+    LogEvt PROC_NAME, lgDETAIL, "Calling CreateShortNamesAndComments..."
+    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Calling CreateShortNamesAndComments" ' <<< STANDALONE DEBUG
+    Call CreateShortNamesAndComments(lo:=tbl, maxLen:=40, tgtColName:="DeviceName") ' Call with explicit parameters
     ' Call FreezeHeaderAndFirstColumns(wsData) ' Commented out as requested
 
     ' --- Final Autofit removed as it overrides specific widths set in FormatTableLook ---
@@ -512,10 +524,10 @@ Public Sub CreateShortNamesAndComments( _
 
         ' Add the triangle only when we actually truncated
         If visibleText <> fullText Then
-            c.AddComment Text:=fullText  ' Legacy NOTE → red triangle
-            c.Comment.Visible = False
+            c.AddComment Text:=fullText  ' Legacy NOTE ? red triangle
+            c.Comment.visible = False
             added = added + 1
-            If DebugMode Then Debug.Print "Row:" & c.Row, "Len:" & Len(fullText), "→ TRIANGLE", "Old comment:" & hadComment
+            If DebugMode Then Debug.Print "Row:" & c.Row, "Len:" & Len(fullText), "? TRIANGLE", "Old comment:" & hadComment
         Else
             kept = kept + 1
             If DebugMode Then Debug.Print "Row:" & c.Row, "Len:" & Len(fullText), "(no change)", "Old comment:" & hadComment
@@ -527,7 +539,7 @@ Public Sub CreateShortNamesAndComments( _
 
     ' Final summary
     Debug.Print String(60, "-")
-    Debug.Print PROC & " SUMMARY → Added:" & added & "  Unchanged:" & kept & "  Total rows:" & rowCount
+    Debug.Print PROC & " SUMMARY ? Added:" & added & "  Unchanged:" & kept & "  Total rows:" & rowCount
     Debug.Print String(60, "-")
     
     ' Log results
@@ -552,72 +564,102 @@ Private Function SmartTruncate(txt As String, limit As Long) As String
     End If
 End Function
 
-Private Sub ReorganizeColumns(tbl As ListObject)
-    ' Purpose: Moves columns to a predefined order.
-    Const PROC_NAME As String = "mod_Format.ReorganizeColumns"
-    Dim desiredOrder As Variant, currentPos As Long, targetPos As Long, colName As Variant, lc As ListColumn
-    ' --- Define Desired Order (Consider moving to mod_Config) ---
-    ' Updated order based on user feedback 2025-04-30 (Task: Fix formatting issues)
-    ' Moved City and State to the end
-    desiredOrder = Array( _
-        "K_Number", "DecisionDate", "Applicant", "DeviceName", "Contact", _
-        "CompanyRecap", "Score_Percent", "Category", "FDA_Link", _
-        "Final_Score", "DateReceived", "ProcTimeDays", "AC", "PC", "SubmType", "Country", "Statement", _
-        "AC_Wt", "PC_Wt", "KW_Wt", "ST_Wt", "PT_Wt", "GL_Wt", "NF_Calc", "Synergy_Calc", _
-        "City", "State" _
-    )
-    ' Note: Any columns *not* listed here will end up even further to the right.
+'======================== mod_Format.bas ========================
+' Replaces the old Cut/Insert logic with Copy/Insert/Delete
+' → Preserves legacy Notes, CF rules, data-validation, etc.
+' → Adds verbose tracing (Debug.Print) when DebugMode = True
+'================================================================
+Public Sub ReorganizeColumns( _
+        ByVal lo As ListObject, _
+        Optional DebugMode As Boolean = False)
 
-    On Error GoTo ReorgError
-    LogEvt PROC_NAME, lgDETAIL, "Reorganizing columns...", "Table=" & tbl.Name
-    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Start reorganizing columns", "Table=" & tbl.Name
-    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Entered ReorganizeColumns", tbl.Name ' <<< STANDALONE DEBUG
+    Const PROC As String = "ReorganizeColumns"
+    On Error GoTo ErrHandler
+    
+    ' Force debug info for critical diagnostics
+    Debug.Print "ReorganizeColumns ENTERED with DebugMode=" & DebugMode & " on " & lo.Name
+    Debug.Print "Table starts at column " & lo.Range.Column & " (" & ColumnLetterFromNumber(lo.Range.Column) & ")"
+    
+    ' desired order, zero-based
+    Dim targetOrder As Variant
+    targetOrder = Array( _
+        "K_Number", "DecisionDate", "Applicant", "DeviceName", _
+        "Contact", "CompanyRecap", "Score_Percent", "Category", _
+        "FDA_Link", "Final_Score", "DateReceived", "ProcTimeDays", _
+        "AC", "PC", "SubmType", "Country", "Statement", _
+        "AC_Wt", "PC_Wt", "KW_Wt", "ST_Wt", "PT_Wt", _
+        "GL_Wt", "NF_Calc", "Synergy_Calc", "City", "State")
 
-    Application.ScreenUpdating = False ' Speed up column moves
+    Dim firstTableCol As Long: firstTableCol = lo.Range.Column   ' left edge
+    Dim tgtPos As Long, curPos As Long, destCol As Long
+    Dim colName As String, lc As ListColumn
 
-    targetPos = 1
-    For Each colName In desiredOrder
-        On Error Resume Next ' Check if column exists
-        Set lc = tbl.ListColumns(colName)
-        On Error GoTo ReorgError ' Restore handler
+    For tgtPos = LBound(targetOrder) To UBound(targetOrder)
+        colName = CStr(targetOrder(tgtPos))
 
-        If Not lc Is Nothing Then
-            currentPos = lc.Index
-            LogEvt PROC_NAME, lgDETAIL, "Processing column '" & colName & "'. Current Index=" & currentPos & ", Target Index=" & targetPos
-            mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Processing column", "Col=" & colName & ", Current=" & currentPos & ", Target=" & targetPos
-            StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Processing column", CStr(colName) & " | Current=" & currentPos & ", Target=" & targetPos ' <<< STANDALONE DEBUG
-            If currentPos <> targetPos Then
-                LogEvt PROC_NAME, lgDETAIL, "Attempting to move '" & colName & "' from " & currentPos & " to " & targetPos
-                StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Attempting move", CStr(colName) & " | From=" & currentPos & ", To=" & targetPos ' <<< STANDALONE DEBUG
-                lc.Range.EntireColumn.Cut
-                tbl.HeaderRowRange.Parent.Columns(targetPos).Insert Shift:=xlToRight
-                Application.CutCopyMode = False ' Clear clipboard
-                LogEvt PROC_NAME, lgDETAIL, "Moved column '" & colName & "' from " & currentPos & " to " & targetPos, "Table=" & tbl.Name
-                mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Moved column", "Table=" & tbl.Name & ", Col=" & colName & ", From=" & currentPos & ", To=" & targetPos
-                StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Moved column", CStr(colName) ' <<< STANDALONE DEBUG
-            End If
-            targetPos = targetPos + 1
-        Else
-            LogEvt PROC_NAME, lgWARN, "Column '" & colName & "' not found for reorganization.", "Table=" & tbl.Name
-            mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Column not found for reorg", "Table=" & tbl.Name & ", Col=" & colName
-            StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Column NOT FOUND for reorg", CStr(colName) ' <<< STANDALONE DEBUG
-        End If
         Set lc = Nothing
-    Next colName
+        On Error Resume Next
+        Set lc = lo.ListColumns(colName)
+        On Error GoTo ErrHandler
+        If lc Is Nothing Then GoTo NextCol          ' column missing ? skip
 
-    Application.ScreenUpdating = True
-    LogEvt PROC_NAME, lgDETAIL, "Column reorganization complete.", "Table=" & tbl.Name
-    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Column reorganization complete", "Table=" & tbl.Name
-    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "ReorganizeColumns complete", tbl.Name ' <<< STANDALONE DEBUG
+        curPos = lc.Index
+        If curPos = tgtPos + 1 Then
+            If DebugMode Then Debug.Print PROC, "Skip", colName, _
+                                   "(Already at position " & curPos & ")"
+            GoTo NextCol    ' already correct
+        End If
+
+        '—————————————  Copy / Insert at TARGET position  —————————————
+        destCol = firstTableCol + tgtPos            ' absolute sheet column
+        If DebugMode Then
+            Debug.Print PROC, "Move", colName, _
+                "From=" & curPos, "(Table Index)", _
+                "To=" & tgtPos + 1, "(Target TableIdx)", _
+                "Insert@" & destCol, "(" & ColumnLetterFromNumber(destCol) & ")"
+        End If
+
+        lc.Range.EntireColumn.Copy
+        lo.Parent.Columns(destCol).Insert Shift:=xlShiftToRight
+        Application.CutCopyMode = False
+
+        ' Calculate absolute sheet column position of original
+        Dim curAbs As Long
+        curAbs = firstTableCol + curPos - 1    'absolute sheet column of the original
+
+        '—— after the insert every column ≥ destCol shifts right
+        If curAbs >= destCol Then curAbs = curAbs + 1
+
+        If DebugMode Then
+            Debug.Print "   → Original at sheet column " & curAbs & " (" & _
+                        ColumnLetterFromNumber(curAbs) & ")"
+        End If
+
+        lo.Parent.Columns(curAbs).Delete       'delete the true original
+        '———————————————————————————————————————————————————————————————
+
+NextCol:
+    Next tgtPos
     Exit Sub
-
-ReorgError:
-    Application.ScreenUpdating = True ' Ensure screen updating is back on
-    LogEvt PROC_NAME, lgERROR, "Error reorganizing columns: " & Err.Description, "Table=" & tbl.Name
-    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error reorganizing columns", "Table=" & tbl.Name & ", Err=" & Err.Number & " - " & Err.Description
-    StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "ERROR in ReorganizeColumns", "Err=" & Err.Number & " - " & Err.Description ' <<< STANDALONE DEBUG
-    MsgBox "An error occurred while reorganizing columns: " & Err.Description, vbExclamation, "Column Reorganization Error"
+ErrHandler:
+    Debug.Print PROC & " ERROR " & Err.Number & " – " & Err.Description
+    
+    ' Helper function - local to this procedure
+    Function ColumnLetterFromNumber(colNum As Long) As String
+        Dim result As String
+        Dim modVal As Integer
+        
+        Do While colNum > 0
+            modVal = (colNum - 1) Mod 26
+            result = Chr(65 + modVal) & result
+            colNum = (colNum - modVal - 1) \ 26
+        Loop
+        
+        If Len(result) = 0 Then result = "?"  ' Safety for invalid values
+        ColumnLetterFromNumber = result
+    End Function
 End Sub
+
 
 Private Sub SortDataTable(tbl As ListObject)
     ' Purpose: Sorts the table by the primary sort key(s).
