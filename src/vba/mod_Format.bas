@@ -643,9 +643,10 @@ NextCol:
     Exit Sub
 ErrHandler:
     Debug.Print PROC & " ERROR " & Err.Number & " – " & Err.Description
-    
-    ' Helper function - local to this procedure
-    Function ColumnLetterFromNumber(colNum As Long) As String
+End Sub
+
+' Helper function for converting column numbers to Excel letters (A, B, C, etc.)
+Private Function ColumnLetterFromNumber(colNum As Long) As String
         Dim result As String
         Dim modVal As Integer
         
