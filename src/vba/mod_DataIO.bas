@@ -120,7 +120,8 @@ ClearErrorHandler:
 End Sub
 
 
-Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
+Public Function RefreshPowerQuery(targetTable As ListObject, Optional baseName As String = "", _
+                                  Optional logTarget As Object = Nothing) As Boolean
     ' Purpose: Refreshes the Power Query associated with the target table. 
     '          First attempts via WorkbookConnection (modern approach), 
     '          falls back to QueryTable if necessary (legacy approach).
@@ -128,106 +129,154 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
     Dim qt As QueryTable
     Dim wbConn As WorkbookConnection
     Dim connName As String
+    Dim nameTry As Variant, c As WorkbookConnection
     Const PROC_NAME As String = "RefreshPowerQuery"
     RefreshPowerQuery = False ' Default to False
+
+    ' Use LogTarget or fall back to default logging
+    If logTarget Is Nothing Then
+        ' Use normal LogEvt and TraceEvt
+        LogEvt PROC_NAME, lgINFO, "Starting refresh with default logging"
+    End If
 
     If targetTable Is Nothing Then
         LogEvt PROC_NAME, lgERROR, "Target table object is Nothing. Cannot refresh."
         mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Target table object is Nothing"
         Exit Function
     End If
+    
+    ' If baseName not provided, use target table name
+    If baseName = "" Then
+        baseName = targetTable.Name
+    End If
 
     On Error GoTo RefreshErrorHandler
 
-    ' --- Get the QueryTable directly from the ListObject ---
-    LogEvt PROC_NAME, lgINFO, "Attempting to get QueryTable from ListObject: " & targetTable.Name
-    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Getting QueryTable from ListObject", "Table=" & targetTable.Name
-    Set qt = targetTable.QueryTable
-
-    If qt Is Nothing Then
-        LogEvt PROC_NAME, lgERROR, "Could not find QueryTable associated with table '" & targetTable.Name & "'."
-        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "QueryTable object is Nothing", "Table='" & targetTable.Name & "'"
-        MsgBox "Error: Could not find the Power Query connection associated with table '" & targetTable.Name & "'. Cannot refresh.", vbCritical, "Refresh Error"
-        Exit Function ' Exit, cannot refresh
+    '==============================
+    ' 1. Try likely exact matches
+    '==============================
+    LogEvt PROC_NAME, lgINFO, "Looking for WorkbookConnection with base name: " & baseName
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Looking for connection", "BaseName=" & baseName
+    
+    For Each nameTry In Array(baseName, "Query - " & baseName, "Connection " & baseName)
+        On Error Resume Next
+        Set wbConn = ThisWorkbook.Connections(nameTry)
+        On Error GoTo 0
+        If Not wbConn Is Nothing Then 
+            LogEvt PROC_NAME, lgINFO, "Found connection: " & wbConn.Name
+            mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found connection by exact name", "Name=" & wbConn.Name
+            Exit For
+        End If
+    Next nameTry
+    
+    '==============================
+    ' 2. Fallback: loose search
+    '==============================
+    If wbConn Is Nothing Then
+        LogEvt PROC_NAME, lgINFO, "No exact match found. Trying loose search for: " & baseName
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Trying loose search", "Pattern=" & baseName
+        
+        For Each c In ThisWorkbook.Connections
+            If InStr(1, c.Name, baseName, vbTextCompare) > 0 Then
+                Set wbConn = c
+                LogEvt PROC_NAME, lgINFO, "Found connection via loose search: " & wbConn.Name
+                mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found connection by pattern match", "Name=" & wbConn.Name
+                Exit For
+            End If
+        Next c
     End If
     
-    connName = qt.Name
-    LogEvt PROC_NAME, lgINFO, "Found QueryTable: " & connName
-    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found QueryTable", "Name=" & connName
-
-    ' --- Ensure refresh is enabled BEFORE attempting ---
-    If Not qt.EnableRefresh Then
-        LogEvt PROC_NAME, lgWARN, "QueryTable refresh was disabled for '" & connName & "'. Attempting to enable.", "Current EnableRefresh=" & qt.EnableRefresh
-        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Refresh was disabled. Attempting enable.", "QueryTable='" & connName & "'"
-        qt.EnableRefresh = True
-        If Not qt.EnableRefresh Then
-             LogEvt PROC_NAME, lgERROR, "Failed to set EnableRefresh=True for QueryTable '" & connName & "'. Halting refresh attempt."
-             mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Failed to set EnableRefresh=True", "QueryTable='" & connName & "'"
-             MsgBox "Error: Could not enable refresh for QueryTable '" & connName & "'.", vbCritical, "Refresh Error"
-             Exit Function ' Cannot proceed
-        Else
-             LogEvt PROC_NAME, lgINFO, "Successfully set EnableRefresh=True for QueryTable '" & connName & "'."
-             mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Successfully set EnableRefresh=True", "QueryTable='" & connName & "'"
+    ' Fall back to QueryTable only if no WorkbookConnection found
+    If wbConn Is Nothing Then
+        LogEvt PROC_NAME, lgWARN, "No WorkbookConnection found. Falling back to QueryTable."
+        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "No connection found, trying QueryTable fallback"
+        
+        Set qt = targetTable.QueryTable
+        If qt Is Nothing Then
+            LogEvt PROC_NAME, lgERROR, "Could not find QueryTable associated with table '" & targetTable.Name & "'."
+            mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "QueryTable object is Nothing", "Table='" & targetTable.Name & "'"
+            MsgBox "Error: Could not find the Power Query connection associated with table '" & targetTable.Name & "'. Cannot refresh.", vbCritical, "Refresh Error"
+            Exit Function ' Exit, cannot refresh
         End If
-    Else
-        LogEvt PROC_NAME, lgDETAIL, "QueryTable refresh already enabled for '" & connName & "'.", "Current EnableRefresh=" & qt.EnableRefresh
-        mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Refresh already enabled", "QueryTable='" & connName & "'"
+        
+        connName = qt.Name
+        LogEvt PROC_NAME, lgINFO, "Found QueryTable: " & connName
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found QueryTable", "Name=" & connName
+    
+        ' --- Ensure refresh is enabled BEFORE attempting ---
+        If Not qt.EnableRefresh Then
+            LogEvt PROC_NAME, lgWARN, "QueryTable refresh was disabled for '" & connName & "'. Attempting to enable."
+            mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Refresh was disabled. Attempting enable.", "QueryTable='" & connName & "'"
+            qt.EnableRefresh = True
+            If Not qt.EnableRefresh Then
+                 LogEvt PROC_NAME, lgERROR, "Failed to set EnableRefresh=True for QueryTable '" & connName & "'. Halting refresh attempt."
+                 mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Failed to set EnableRefresh=True", "QueryTable='" & connName & "'"
+                 MsgBox "Error: Could not enable refresh for QueryTable '" & connName & "'.", vbCritical, "Refresh Error"
+                 Exit Function ' Cannot proceed
+            Else
+                 LogEvt PROC_NAME, lgINFO, "Successfully set EnableRefresh=True for QueryTable '" & connName & "'."
+                 mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Successfully set EnableRefresh=True", "QueryTable='" & connName & "'"
+            End If
+        End If
     End If
 
-    ' --- Find the Workbook Connection (PREFERRED PATH) ---
-    ' IMPORTANT: Get the connection BEFORE cleanup
-    On Error Resume Next
-    Set wbConn = ThisWorkbook.Connections(connName)
-    If wbConn Is Nothing Then Set wbConn = ThisWorkbook.Connections("Query - " & connName)
-    On Error GoTo RefreshErrorHandler ' Restore main handler
-
-    ' --- MODERN PATH: Refresh via WorkbookConnection (preferred) ---
+    '==============================
+    ' 3. Refresh via appropriate method
+    '==============================
+    On Error GoTo RefreshFail
+    
     If Not wbConn Is Nothing Then
-        LogEvt PROC_NAME, lgINFO, "Found WorkbookConnection: " & wbConn.Name
-        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found WorkbookConnection", "Name=" & wbConn.Name
+        ' --- MODERN PATH: Refresh via WorkbookConnection (preferred) ---
+        LogEvt PROC_NAME, lgINFO, "Refreshing via WorkbookConnection: " & wbConn.Name
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Starting WorkbookConnection refresh", "Connection=" & wbConn.Name
         
-        ' --- CRITICAL: Clean up AFTER getting the connection but BEFORE refreshing ---
-        ' Pass our connection to keep to the cleanup function
-        CleanupDuplicateConnections connName, wbConn
-        LogEvt PROC_NAME, lgINFO, "Cleaned up any duplicate connections except our primary connection"
-        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Ran CleanupDuplicateConnections preserving primary", "KeptConnection=" & wbConn.Name
+        ' --- Set background query to false for synchronous refresh ---
+        If Not wbConn.OLEDBConnection Is Nothing Then
+            wbConn.OLEDBConnection.BackgroundQuery = False
+        End If
         
-        LogEvt PROC_NAME, lgINFO, "Attempting refresh via WorkbookConnection: " & wbConn.Name
-        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Starting refresh via WorkbookConnection", "Connection=" & wbConn.Name
+        ' --- Clean up any duplicate connections BEFORE refreshing ---
+        If baseName <> "" Then
+            CleanupDuplicateConnections baseName, wbConn
+            LogEvt PROC_NAME, lgINFO, "Cleaned up any duplicate connections except our primary connection"
+            mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Ran CleanupDuplicateConnections", "KeptConnection=" & wbConn.Name
+        End If
+        
+        ' --- Perform the actual refresh ---
         wbConn.Refresh ' <<< REFRESH VIA WORKBOOK CONNECTION (MODERN PATH) >>>
         
-        LogEvt PROC_NAME, lgINFO, "Refresh completed successfully for connection: " & wbConn.Name
+        LogEvt PROC_NAME, lgINFO, "Refresh succeeded via WorkbookConnection"
         mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Refresh successful via WorkbookConnection", "Connection=" & wbConn.Name
     Else
         ' --- LEGACY PATH: Fall back to QueryTable refresh ---
-        LogEvt PROC_NAME, lgWARN, "No WorkbookConnection found. Falling back to QueryTable refresh."
-        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "WorkbookConnection not found, using QueryTable fallback"
-        
-        ' Even in the fallback case, we should still run cleanup (no connection to preserve)
-        CleanupDuplicateConnections connName
-        LogEvt PROC_NAME, lgINFO, "Cleaned up any duplicate connections based on name pattern"
-        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Ran CleanupDuplicateConnections by pattern", "BaseName=" & connName
+        LogEvt PROC_NAME, lgINFO, "Attempting synchronous refresh via QueryTable: " & connName
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Starting QueryTable refresh", "QueryTable=" & connName
         
         qt.BackgroundQuery = False ' Ensure synchronous refresh
-        LogEvt PROC_NAME, lgINFO, "Attempting synchronous refresh via QueryTable: " & connName
-        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Starting synchronous refresh via QueryTable", "QueryTable=" & connName
         qt.Refresh BackgroundQuery:=False ' <<< REFRESH VIA QUERYTABLE (LEGACY PATH) >>>
         
-        LogEvt PROC_NAME, lgINFO, "QueryTable refresh completed successfully for: " & connName
+        LogEvt PROC_NAME, lgINFO, "Refresh succeeded via QueryTable"
         mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Refresh successful via QueryTable", "QueryTable=" & connName
     End If
 
-    RefreshPowerQuery = True ' If refresh completes without error
+    RefreshPowerQuery = True ' If we got here, refresh completed successfully
     Exit Function
 
-RefreshErrorHandler:
+RefreshFail:
     Dim errDesc As String: errDesc = Err.Description
     Dim errNum As Long: errNum = Err.Number
+    LogEvt PROC_NAME, lgERROR, "Error during refresh. Err #" & errNum & ": " & errDesc
+    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error during refresh", "Err=" & errNum & " - " & errDesc
+    RefreshPowerQuery = False
+    Exit Function
+    
+RefreshErrorHandler:
+    errDesc = Err.Description
+    errNum = Err.Number
     RefreshPowerQuery = False ' Ensure False is returned
     LogEvt PROC_NAME, lgERROR, "Error during refresh process. Error #" & errNum & ": " & errDesc
     mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error during refresh process", "Err=" & errNum & " - " & errDesc
-    MsgBox "Refresh failed: " & vbCrLf & errDesc, vbExclamation, "Refresh Error" ' Updated MsgBox text
-    ' Exit Function ' Exit implicitly after error handler
+    MsgBox "Refresh failed: " & vbCrLf & errDesc, vbExclamation, "Refresh Error"
 End Function
 
 Public Function SheetExists(sheetName As String) As Boolean

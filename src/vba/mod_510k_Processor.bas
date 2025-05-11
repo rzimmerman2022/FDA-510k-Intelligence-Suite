@@ -246,12 +246,12 @@ Public Sub ProcessMonthly510k()
             LogEvt "Refresh", lgERROR, "Data table not found on " & DATA_SHEET_NAME & " during skipped run check."
             mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "Data table not found during skipped run refresh check"
         Else
-            ' Use mod_DataIO for refresh during skipped run check
-            If Not mod_DataIO.RefreshPowerQuery(tblData) Then
-                LogEvt "Refresh", lgERROR, "PQ Refresh failed during skipped run check (via mod_DataIO)."
-                mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "PQ Refresh failed during skipped run check (mod_DataIO)"
-                 ' GoTo ProcessErrorHandler ' Option to make it critical
-            End If
+        ' Use mod_DataIO for refresh during skipped run check
+        If Not mod_DataIO.RefreshPowerQuery(tblData, "pgGet510kData") Then
+            LogEvt "Refresh", lgERROR, "PQ Refresh failed during skipped run check (via mod_DataIO)."
+            mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "PQ Refresh failed during skipped run check (mod_DataIO)"
+             ' GoTo ProcessErrorHandler ' Option to make it critical
+        End If
         End If
         Set tblData = Nothing
         GoTo CleanExit ' Exit handled by EnsureUIOn
@@ -283,7 +283,7 @@ Public Sub ProcessMonthly510k()
         LogEvt "Refresh", lgINFO, "Attempting PQ refresh for table: " & tblData.Name
         mod_DebugTraceHelpers.TraceEvt lvlINFO, "ProcessMonthly510k", "Phase: Refresh Power Query Start", "Table=" & tblData.Name
         ' Use mod_DataIO for main refresh
-        If Not mod_DataIO.RefreshPowerQuery(tblData) Then ' Includes post-refresh lock
+        If Not mod_DataIO.RefreshPowerQuery(tblData, "pgGet510kData") Then ' Includes post-refresh lock
              LogEvt "Refresh", lgERROR, "PQ Refresh failed via mod_DataIO. Processing stopped."
              mod_DebugTraceHelpers.TraceEvt lvlERROR, "ProcessMonthly510k", "PQ Refresh Failed (mod_DataIO) - Halting Process"
              GoTo ProcessErrorHandler ' Stop on critical PQ error
