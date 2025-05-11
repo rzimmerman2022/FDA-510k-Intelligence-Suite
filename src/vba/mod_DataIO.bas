@@ -32,6 +32,14 @@
 ' --------------------------------------------------------------------------
 ' Date        Author          Description
 ' ----------- --------------- ----------------------------------------------
+' 2025-05-11  Cline (AI)      - Fixed critical PowerQuery refresh issue by reversing operations
+'                               order: grab connection reference first, THEN clean up duplicates
+'                               while preserving the connection reference, THEN refresh.
+'                             - Updated CleanupDuplicateConnections to accept keepConn parameter
+'                               to prevent deleting the active connection during cleanup.
+'                             - Fixed bug where we deleted connection then tried to use it.
+'                             - Added connection counting and improved duplicate logic.
+'                             - Created CONNECTION_CLEANUP_FIX.md documentation.
 ' 2025-05-08  Cline (AI)      - Fixed Error #1004 during refresh by changing RefreshPowerQuery
 '                               to use WorkbookConnection.Refresh as primary path,
 '                               with QueryTable.Refresh as fallback.
@@ -118,6 +126,8 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
     '          falls back to QueryTable if necessary (legacy approach).
     '          Duplicate columns may occur and should be handled post-refresh by mod_Format.
     Dim qt As QueryTable
+    Dim wbConn As WorkbookConnection
+    Dim connName As String
     Const PROC_NAME As String = "RefreshPowerQuery"
     RefreshPowerQuery = False ' Default to False
 
@@ -128,11 +138,6 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
     End If
 
     On Error GoTo RefreshErrorHandler
-
-    ' --- Before attempting any refresh, clean up any duplicate connections ---
-    CleanupDuplicateConnections
-    LogEvt PROC_NAME, lgINFO, "Cleaned up any duplicate connections before refresh"
-    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Ran CleanupDuplicateConnections before refresh"
 
     ' --- Get the QueryTable directly from the ListObject ---
     LogEvt PROC_NAME, lgINFO, "Attempting to get QueryTable from ListObject: " & targetTable.Name
@@ -145,39 +150,47 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
         MsgBox "Error: Could not find the Power Query connection associated with table '" & targetTable.Name & "'. Cannot refresh.", vbCritical, "Refresh Error"
         Exit Function ' Exit, cannot refresh
     End If
-    LogEvt PROC_NAME, lgINFO, "Found QueryTable: " & qt.Name
-    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found QueryTable", "Name=" & qt.Name
+    
+    connName = qt.Name
+    LogEvt PROC_NAME, lgINFO, "Found QueryTable: " & connName
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found QueryTable", "Name=" & connName
 
     ' --- Ensure refresh is enabled BEFORE attempting ---
     If Not qt.EnableRefresh Then
-        LogEvt PROC_NAME, lgWARN, "QueryTable refresh was disabled for '" & qt.Name & "'. Attempting to enable.", "Current EnableRefresh=" & qt.EnableRefresh
-        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Refresh was disabled. Attempting enable.", "QueryTable='" & qt.Name & "'"
+        LogEvt PROC_NAME, lgWARN, "QueryTable refresh was disabled for '" & connName & "'. Attempting to enable.", "Current EnableRefresh=" & qt.EnableRefresh
+        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Refresh was disabled. Attempting enable.", "QueryTable='" & connName & "'"
         qt.EnableRefresh = True
         If Not qt.EnableRefresh Then
-             LogEvt PROC_NAME, lgERROR, "Failed to set EnableRefresh=True for QueryTable '" & qt.Name & "'. Halting refresh attempt."
-             mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Failed to set EnableRefresh=True", "QueryTable='" & qt.Name & "'"
-             MsgBox "Error: Could not enable refresh for QueryTable '" & qt.Name & "'.", vbCritical, "Refresh Error"
+             LogEvt PROC_NAME, lgERROR, "Failed to set EnableRefresh=True for QueryTable '" & connName & "'. Halting refresh attempt."
+             mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Failed to set EnableRefresh=True", "QueryTable='" & connName & "'"
+             MsgBox "Error: Could not enable refresh for QueryTable '" & connName & "'.", vbCritical, "Refresh Error"
              Exit Function ' Cannot proceed
         Else
-             LogEvt PROC_NAME, lgINFO, "Successfully set EnableRefresh=True for QueryTable '" & qt.Name & "'."
-             mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Successfully set EnableRefresh=True", "QueryTable='" & qt.Name & "'"
+             LogEvt PROC_NAME, lgINFO, "Successfully set EnableRefresh=True for QueryTable '" & connName & "'."
+             mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Successfully set EnableRefresh=True", "QueryTable='" & connName & "'"
         End If
     Else
-        LogEvt PROC_NAME, lgDETAIL, "QueryTable refresh already enabled for '" & qt.Name & "'.", "Current EnableRefresh=" & qt.EnableRefresh
-        mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Refresh already enabled", "QueryTable='" & qt.Name & "'"
+        LogEvt PROC_NAME, lgDETAIL, "QueryTable refresh already enabled for '" & connName & "'.", "Current EnableRefresh=" & qt.EnableRefresh
+        mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Refresh already enabled", "QueryTable='" & connName & "'"
     End If
 
     ' --- Find the Workbook Connection (PREFERRED PATH) ---
-    Dim wbConn As WorkbookConnection
+    ' IMPORTANT: Get the connection BEFORE cleanup
     On Error Resume Next
-    Set wbConn = ThisWorkbook.Connections(qt.Name)
-    If wbConn Is Nothing Then Set wbConn = ThisWorkbook.Connections("Query - " & qt.Name)
+    Set wbConn = ThisWorkbook.Connections(connName)
+    If wbConn Is Nothing Then Set wbConn = ThisWorkbook.Connections("Query - " & connName)
     On Error GoTo RefreshErrorHandler ' Restore main handler
 
     ' --- MODERN PATH: Refresh via WorkbookConnection (preferred) ---
     If Not wbConn Is Nothing Then
         LogEvt PROC_NAME, lgINFO, "Found WorkbookConnection: " & wbConn.Name
         mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found WorkbookConnection", "Name=" & wbConn.Name
+        
+        ' --- CRITICAL: Clean up AFTER getting the connection but BEFORE refreshing ---
+        ' Pass our connection to keep to the cleanup function
+        CleanupDuplicateConnections connName, wbConn
+        LogEvt PROC_NAME, lgINFO, "Cleaned up any duplicate connections except our primary connection"
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Ran CleanupDuplicateConnections preserving primary", "KeptConnection=" & wbConn.Name
         
         LogEvt PROC_NAME, lgINFO, "Attempting refresh via WorkbookConnection: " & wbConn.Name
         mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Starting refresh via WorkbookConnection", "Connection=" & wbConn.Name
@@ -190,13 +203,18 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
         LogEvt PROC_NAME, lgWARN, "No WorkbookConnection found. Falling back to QueryTable refresh."
         mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "WorkbookConnection not found, using QueryTable fallback"
         
+        ' Even in the fallback case, we should still run cleanup (no connection to preserve)
+        CleanupDuplicateConnections connName
+        LogEvt PROC_NAME, lgINFO, "Cleaned up any duplicate connections based on name pattern"
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Ran CleanupDuplicateConnections by pattern", "BaseName=" & connName
+        
         qt.BackgroundQuery = False ' Ensure synchronous refresh
-        LogEvt PROC_NAME, lgINFO, "Attempting synchronous refresh via QueryTable: " & qt.Name
-        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Starting synchronous refresh via QueryTable", "QueryTable=" & qt.Name
+        LogEvt PROC_NAME, lgINFO, "Attempting synchronous refresh via QueryTable: " & connName
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Starting synchronous refresh via QueryTable", "QueryTable=" & connName
         qt.Refresh BackgroundQuery:=False ' <<< REFRESH VIA QUERYTABLE (LEGACY PATH) >>>
         
-        LogEvt PROC_NAME, lgINFO, "QueryTable refresh completed successfully for: " & qt.Name
-        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Refresh successful via QueryTable", "QueryTable=" & qt.Name
+        LogEvt PROC_NAME, lgINFO, "QueryTable refresh completed successfully for: " & connName
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Refresh successful via QueryTable", "QueryTable=" & connName
     End If
 
     RefreshPowerQuery = True ' If refresh completes without error
@@ -222,55 +240,93 @@ Public Function SheetExists(sheetName As String) As Boolean
     Set ws = Nothing ' Clean up
 End Function
 
-Public Sub CleanupDuplicateConnections()
+Public Sub CleanupDuplicateConnections(Optional connName As String = "pgGet510kData", _
+                                      Optional keepConn As WorkbookConnection = Nothing)
     ' Purpose: Removes duplicate Power Query connections that may be created by various operations.
     ' Note: This function was previously called by archiving process, but is no longer needed
     '       after the May 2025 update to mod_Archive that uses values-only copies.
+    ' Parameters:
+    '   connName - Base name of the connection to check for duplicates
+    '   keepConn - Optional specific connection object to preserve (won't be deleted)
     ' The function remains available for manual cleanup or other code that may need it.
     Const PROC_NAME As String = "CleanupDuplicateConnections"
     Dim c As WorkbookConnection
     Dim baseConnectionName As String
     Dim originalConnection As WorkbookConnection ' To store ref if found
+    Dim n As Long ' Counter for connections with the base name
     Set originalConnection = Nothing
 
     mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Phase: Cleanup Connections Start"
 
-    ' Try to find the original connection by common names
-    On Error Resume Next
-    Set originalConnection = ThisWorkbook.Connections("pgGet510kData")
-    If originalConnection Is Nothing Then Set originalConnection = ThisWorkbook.Connections("Query - pgGet510kData")
-    On Error GoTo 0 ' Restore default error handling
+    ' If we were passed a specific connection to keep, use that
+    If Not keepConn Is Nothing Then
+        baseConnectionName = connName
+        Set originalConnection = keepConn
+        LogEvt PROC_NAME, lgINFO, "Using provided connection as keeper: '" & keepConn.Name & "'"
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Using provided keeper", "Keeper=" & keepConn.Name
+    Else
+        ' Try to find the original connection by common names
+        On Error Resume Next
+        Set originalConnection = ThisWorkbook.Connections(connName)
+        If originalConnection Is Nothing Then Set originalConnection = ThisWorkbook.Connections("Query - " & connName)
+        On Error GoTo 0 ' Restore default error handling
+    End If
 
     If Not originalConnection Is Nothing Then
-        baseConnectionName = originalConnection.Name
+        baseConnectionName = connName
         LogEvt PROC_NAME, lgINFO, "Checking for duplicate connections based on found connection: '" & baseConnectionName & "'"
         mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Checking duplicate connections", "Base=" & baseConnectionName
         On Error Resume Next ' Ignore errors during loop/delete
         For Each c In ThisWorkbook.Connections
-            ' Check if name is different AND follows the "Base Name (Number)" pattern
-            If c.Name <> baseConnectionName And c.Name Like baseConnectionName & " (*" Then
-                LogEvt PROC_NAME, lgDETAIL, "Deleting duplicate connection: " & c.Name
-                mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Deleting duplicate connection", c.Name
-                c.Delete
+            ' Skip the connection we're keeping
+            If Not keepConn Is Nothing Then
+                If c.Name = keepConn.Name Then
+                    LogEvt PROC_NAME, lgDETAIL, "Keeping connection: " & c.Name
+                    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Keeping connection", "Name=" & c.Name
+                    GoTo NextConn
+                End If
             End If
+            
+            ' Check if name contains the base name (using pattern matching)
+            If InStr(1, c.Name, baseConnectionName, vbTextCompare) > 0 Then
+                n = n + 1
+                If n > 1 Then ' Only delete duplicates, not the first one found
+                    LogEvt PROC_NAME, lgDETAIL, "Deleting duplicate connection: " & c.Name
+                    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Deleting duplicate connection", c.Name
+                    c.Delete
+                End If
+            End If
+NextConn:
         Next c
         On Error GoTo 0 ' Restore default error handling
     Else
          ' Fallback if original connection wasn't found by name
-         baseConnectionName = "pgGet510kData" ' Assume this is the most likely base
-         LogEvt PROC_NAME, lgWARN, "Could not find original PQ connection by typical names. Attempting cleanup based on pattern: '" & baseConnectionName & " (*' or 'Query - " & baseConnectionName & " (*'"
+         baseConnectionName = connName ' Use the provided name or default
+         LogEvt PROC_NAME, lgWARN, "Could not find original PQ connection by typical names. Attempting cleanup based on pattern: '" & baseConnectionName & "'"
          mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Original PQ Connection not found", "FallbackBase=" & baseConnectionName
          On Error Resume Next ' Ignore errors during loop/delete
          For Each c In ThisWorkbook.Connections
-             If c.Name Like baseConnectionName & " (*" Or c.Name Like "Query - " & baseConnectionName & " (*" Then
-                 LogEvt PROC_NAME, lgDETAIL, "Deleting potential duplicate connection: " & c.Name
-                 mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Deleting potential duplicate connection", c.Name
-                 c.Delete
+             ' Skip the keeper connection if specified
+             If Not keepConn Is Nothing Then
+                 If c.Name = keepConn.Name Then GoTo NextConnFallback
              End If
+            
+             If InStr(1, c.Name, baseConnectionName, vbTextCompare) > 0 Then
+                 n = n + 1
+                 If n > 1 Then ' Only delete duplicates, not the first one found
+                     LogEvt PROC_NAME, lgDETAIL, "Deleting potential duplicate connection: " & c.Name
+                     mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Deleting potential duplicate connection", c.Name
+                     c.Delete
+                 End If
+             End If
+NextConnFallback:
          Next c
          On Error GoTo 0 ' Restore default error handling
     End If
 
+    LogEvt PROC_NAME, lgINFO, "Duplicate connections removed: " & (n - 1)
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Connections cleanup complete", "DuplicatesRemoved=" & (n - 1)
+    
     Set c = Nothing
     Set originalConnection = Nothing
     mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Phase: Cleanup Connections End"
