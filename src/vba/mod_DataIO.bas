@@ -32,7 +32,14 @@
 ' --------------------------------------------------------------------------
 ' Date        Author          Description
 ' ----------- --------------- ----------------------------------------------
-' 2025-05-08  Cline (AI)      - Updated CleanupDuplicateConnections documentation to
+' 2025-05-08  Cline (AI)      - Fixed Error #1004 during refresh by changing RefreshPowerQuery
+'                               to use WorkbookConnection.Refresh as primary path,
+'                               with QueryTable.Refresh as fallback.
+'                             - Added automatic call to CleanupDuplicateConnections before
+'                               each refresh to prevent duplicate query errors.
+'                             - Removed setting EnableRefresh = False after refresh
+'                               as this can invalidate the connection.
+'                             - Updated CleanupDuplicateConnections documentation to
 '                               note it is no longer needed by the archive implementation
 '                               due to changes in mod_Archive (values-only copy).
 ' 2025-04-30  Cline (AI)      - Added detailed module header comment block.
@@ -106,7 +113,9 @@ End Sub
 
 
 Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
-    ' Purpose: Refreshes the Power Query associated with the target table using QueryTable object.
+    ' Purpose: Refreshes the Power Query associated with the target table. 
+    '          First attempts via WorkbookConnection (modern approach), 
+    '          falls back to QueryTable if necessary (legacy approach).
     '          Duplicate columns may occur and should be handled post-refresh by mod_Format.
     Dim qt As QueryTable
     Const PROC_NAME As String = "RefreshPowerQuery"
@@ -119,6 +128,11 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
     End If
 
     On Error GoTo RefreshErrorHandler
+
+    ' --- Before attempting any refresh, clean up any duplicate connections ---
+    CleanupDuplicateConnections
+    LogEvt PROC_NAME, lgINFO, "Cleaned up any duplicate connections before refresh"
+    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Ran CleanupDuplicateConnections before refresh"
 
     ' --- Get the QueryTable directly from the ListObject ---
     LogEvt PROC_NAME, lgINFO, "Attempting to get QueryTable from ListObject: " & targetTable.Name
@@ -153,59 +167,48 @@ Public Function RefreshPowerQuery(targetTable As ListObject) As Boolean
         mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Refresh already enabled", "QueryTable='" & qt.Name & "'"
     End If
 
-    ' --- Find the Workbook Connection ---
+    ' --- Find the Workbook Connection (PREFERRED PATH) ---
     Dim wbConn As WorkbookConnection
-    Dim connName As String: connName = qt.Name ' Start assuming connection name matches QueryTable name
-    Dim connNameAlt As String: connNameAlt = "Query - " & qt.Name ' Alternative name format
-
-    On Error Resume Next ' Try finding connection by primary or alternative name
-    Set wbConn = ThisWorkbook.Connections(connName)
-    If wbConn Is Nothing Then Set wbConn = ThisWorkbook.Connections(connNameAlt)
+    On Error Resume Next
+    Set wbConn = ThisWorkbook.Connections(qt.Name)
+    If wbConn Is Nothing Then Set wbConn = ThisWorkbook.Connections("Query - " & qt.Name)
     On Error GoTo RefreshErrorHandler ' Restore main handler
 
-    If wbConn Is Nothing Then
-        LogEvt PROC_NAME, lgERROR, "Could not find WorkbookConnection named '" & connName & "' or '" & connNameAlt & "'."
-        mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "WorkbookConnection not found", "TriedName1=" & connName & ", TriedName2=" & connNameAlt
-        MsgBox "Error: Could not find the Workbook Connection associated with QueryTable '" & qt.Name & "'. Cannot refresh.", vbCritical, "Refresh Error"
-        Exit Function
-    End If
-    LogEvt PROC_NAME, lgINFO, "Found WorkbookConnection: " & wbConn.Name
-    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found WorkbookConnection", "Name=" & wbConn.Name
-
-    ' --- Refresh via QueryTable ---
-    ' Reverted from wbConn.Refresh back to qt.Refresh 2025-04-30 per user feedback on refresh error
-    qt.BackgroundQuery = False ' Ensure synchronous refresh
-    LogEvt PROC_NAME, lgINFO, "Attempting synchronous refresh via QueryTable: " & qt.Name
-    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Starting synchronous refresh via QueryTable", "QueryTable=" & qt.Name
-    qt.Refresh BackgroundQuery:=False ' <<< REFRESH VIA QUERYTABLE >>>
-
-    ' --- Lock refresh settings post-query ---
-    ' Re-enable QueryTable locking as it controls sheet interaction
-    On Error Resume Next ' Best effort to disable these
-    qt.BackgroundQuery = False ' Should already be false, but ensure
-    qt.EnableRefresh = False
-     If Err.Number <> 0 Then
-         LogEvt PROC_NAME, lgWARN, "Could not disable BackgroundQuery/EnableRefresh on QueryTable '" & qt.Name & "' after refresh. Error: " & Err.Description
-         mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "Failed to set QueryTable BackgroundQuery=False / EnableRefresh=False post-refresh", "QueryTable='" & qt.Name & "', Err=" & Err.Description
-         Err.Clear
+    ' --- MODERN PATH: Refresh via WorkbookConnection (preferred) ---
+    If Not wbConn Is Nothing Then
+        LogEvt PROC_NAME, lgINFO, "Found WorkbookConnection: " & wbConn.Name
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Found WorkbookConnection", "Name=" & wbConn.Name
+        
+        LogEvt PROC_NAME, lgINFO, "Attempting refresh via WorkbookConnection: " & wbConn.Name
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Starting refresh via WorkbookConnection", "Connection=" & wbConn.Name
+        wbConn.Refresh ' <<< REFRESH VIA WORKBOOK CONNECTION (MODERN PATH) >>>
+        
+        LogEvt PROC_NAME, lgINFO, "Refresh completed successfully for connection: " & wbConn.Name
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Refresh successful via WorkbookConnection", "Connection=" & wbConn.Name
     Else
-         LogEvt PROC_NAME, lgDETAIL, "Set QueryTable BackgroundQuery=False and EnableRefresh=False post-refresh for '" & qt.Name & "'."
-         mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Set QueryTable BackgroundQuery=False / EnableRefresh=False post-refresh", "QueryTable='" & qt.Name & "'"
+        ' --- LEGACY PATH: Fall back to QueryTable refresh ---
+        LogEvt PROC_NAME, lgWARN, "No WorkbookConnection found. Falling back to QueryTable refresh."
+        mod_DebugTraceHelpers.TraceEvt lvlWARN, PROC_NAME, "WorkbookConnection not found, using QueryTable fallback"
+        
+        qt.BackgroundQuery = False ' Ensure synchronous refresh
+        LogEvt PROC_NAME, lgINFO, "Attempting synchronous refresh via QueryTable: " & qt.Name
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Starting synchronous refresh via QueryTable", "QueryTable=" & qt.Name
+        qt.Refresh BackgroundQuery:=False ' <<< REFRESH VIA QUERYTABLE (LEGACY PATH) >>>
+        
+        LogEvt PROC_NAME, lgINFO, "QueryTable refresh completed successfully for: " & qt.Name
+        mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Refresh successful via QueryTable", "QueryTable=" & qt.Name
     End If
-    On Error GoTo RefreshErrorHandler ' Restore main handler
 
     RefreshPowerQuery = True ' If refresh completes without error
-    LogEvt PROC_NAME, lgINFO, "QueryTable refresh completed successfully for: " & qt.Name
-    mod_DebugTraceHelpers.TraceEvt lvlINFO, PROC_NAME, "Refresh successful via QueryTable", "QueryTable=" & qt.Name
     Exit Function
 
 RefreshErrorHandler:
     Dim errDesc As String: errDesc = Err.Description
     Dim errNum As Long: errNum = Err.Number
     RefreshPowerQuery = False ' Ensure False is returned
-    LogEvt PROC_NAME, lgERROR, "Error during QueryTable refresh process. Error #" & errNum & ": " & errDesc
-    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error during QueryTable refresh process", "Err=" & errNum & " - " & errDesc
-    MsgBox "QueryTable refresh failed: " & vbCrLf & errDesc, vbExclamation, "Refresh Error" ' Updated MsgBox text
+    LogEvt PROC_NAME, lgERROR, "Error during refresh process. Error #" & errNum & ": " & errDesc
+    mod_DebugTraceHelpers.TraceEvt lvlERROR, PROC_NAME, "Error during refresh process", "Err=" & errNum & " - " & errDesc
+    MsgBox "Refresh failed: " & vbCrLf & errDesc, vbExclamation, "Refresh Error" ' Updated MsgBox text
     ' Exit Function ' Exit implicitly after error handler
 End Function
 
