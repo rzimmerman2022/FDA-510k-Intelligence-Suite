@@ -134,7 +134,7 @@ Public Function ApplyAll(tbl As ListObject, wsData As Worksheet) As Boolean
 
     LogEvt PROC_NAME, lgDETAIL, "Calling CreateShortNamesAndComments..."
     StandaloneDebug.DebugLog "mod_Format", PROC_NAME, "Calling CreateShortNamesAndComments" ' <<< STANDALONE DEBUG
-    Call CreateShortNamesAndComments(tbl) ' Placeholder
+    Call CreateShortNamesAndComments(tbl) ' Call with default parameters
 
     ' --- Add logging before ReorganizeColumns ---
     LogEvt PROC_NAME, lgDETAIL, "Checking 'Category' column existence BEFORE ReorganizeColumns...", "Exists=" & ColumnExists(tbl, "Category")
@@ -446,29 +446,111 @@ FormatError:
     Debug.Print Time & " - ERROR in " & PROC_NAME & ": " & Err.Description
 End Sub
 
-Private Sub CreateShortNamesAndComments(tbl As ListObject)
-    ' Purpose: Adds comments with full names to columns with shortened headers.
-    '          (Placeholder - implement specific logic if needed)
-    Const PROC_NAME As String = "mod_Format.CreateShortNamesAndComments"
-    On Error Resume Next ' Be lenient
-    LogEvt PROC_NAME, lgDETAIL, "Applying short names/comments (Placeholder)...", "Table=" & tbl.Name
-    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Applying short names/comments (Placeholder)", "Table=" & tbl.Name
+'-----------------------------------------------------------------
+' Show a 40-char visible name; add a legacy NOTE (red triangle)
+' ***only*** when we actually truncated the text.
+' Added enhanced debugging to trace exactly what's happening.
+'-----------------------------------------------------------------
+Public Sub CreateShortNamesAndComments( _
+        lo As ListObject, _
+        Optional maxLen As Long = 40, _
+        Optional tgtColName As String = "DeviceName", _
+        Optional DebugMode As Boolean = True)  ' Default to debug ON
 
-    ' --- Example Placeholder Logic ---
-    ' Dim lc As ListColumn
-    ' For Each lc In tbl.ListColumns
-    '     Select Case lc.Name
-    '         Case "AC_Wt": lc.Range.Cells(1).AddComment "Advisory Committee Weight"
-    '         Case "PC_Wt": lc.Range.Cells(1).AddComment "Product Code Weight"
-    '         ' Add other cases as needed
-    '     End Select
-    ' Next lc
-    ' --- End Placeholder ---
+    Const PROC As String = "CreateShortNamesAndComments"
+    On Error GoTo ErrHandler
 
-    LogEvt PROC_NAME, lgDETAIL, "Short names/comments applied (Placeholder).", "Table=" & tbl.Name
-    mod_DebugTraceHelpers.TraceEvt lvlDET, PROC_NAME, "Short names/comments applied (Placeholder)", "Table=" & tbl.Name
-    On Error GoTo 0
+    ' Debug early failures clearly
+    If lo Is Nothing Then
+        Debug.Print PROC & " - Error: ListObject is Nothing!"
+        LogEvt PROC, lgERROR, "ListObject is Nothing!"
+        Exit Sub
+    End If
+    
+    Debug.Print PROC & " - Working with table: " & lo.Name
+    
+    ' Debug column existence
+    Debug.Print PROC & " - Looking for column: " & tgtColName
+    
+    Dim tgtCol As ListColumn
+    On Error Resume Next
+    Set tgtCol = lo.ListColumns(tgtColName)
+    Dim errNum As Long: errNum = Err.Number
+    Dim errDesc As String: errDesc = Err.Description
+    On Error GoTo ErrHandler
+    
+    If tgtCol Is Nothing Then
+        Debug.Print PROC & " - Error: Column """ & tgtColName & """ not found! Err=" & errNum & " - " & errDesc
+        LogEvt PROC, lgERROR, "Column not found: " & tgtColName & ", Err=" & errNum & " - " & errDesc
+        Exit Sub
+    Else
+        Debug.Print PROC & " - Found column: " & tgtColName & " at index: " & tgtCol.Index
+    End If
+
+    ' Show red triangles only (keeps sheet clean)
+    Application.DisplayCommentIndicator = xlCommentIndicatorOnly
+    Debug.Print PROC & " - Set DisplayCommentIndicator to xlCommentIndicatorOnly"
+
+    Dim c As Range, fullText As String, visibleText As String
+    Dim added As Long, kept As Long, rowCount As Long
+
+    Debug.Print "--------- Processing " & tgtCol.DataBodyRange.Rows.Count & " rows ---------"
+    
+    For Each c In tgtCol.DataBodyRange.Cells
+        rowCount = rowCount + 1
+        fullText = CStr(c.Value2)
+        visibleText = SmartTruncate(fullText, maxLen)
+
+        ' Wipe any old notes
+        On Error Resume Next
+        Dim hadComment As Boolean: hadComment = Not (c.Comment Is Nothing)
+        If hadComment Then c.Comment.Delete
+        On Error GoTo ErrHandler
+
+        ' Always store something readable in the cell
+        c.Value2 = visibleText
+
+        ' Add the triangle only when we actually truncated
+        If visibleText <> fullText Then
+            c.AddComment Text:=fullText  ' Legacy NOTE → red triangle
+            c.Comment.Visible = False
+            added = added + 1
+            If DebugMode Then Debug.Print "Row:" & c.Row, "Len:" & Len(fullText), "→ TRIANGLE", "Old comment:" & hadComment
+        Else
+            kept = kept + 1
+            If DebugMode Then Debug.Print "Row:" & c.Row, "Len:" & Len(fullText), "(no change)", "Old comment:" & hadComment
+        End If
+        
+        ' Progress indicator every 100 rows for large datasets
+        If rowCount Mod 100 = 0 Then Debug.Print PROC & " - Processed " & rowCount & " rows..."
+    Next c
+
+    ' Final summary
+    Debug.Print String(60, "-")
+    Debug.Print PROC & " SUMMARY → Added:" & added & "  Unchanged:" & kept & "  Total rows:" & rowCount
+    Debug.Print String(60, "-")
+    
+    ' Log results
+    LogEvt PROC, lgINFO, "Added red-triangle notes to " & added & " rows. (Unchanged: " & kept & ", Total: " & rowCount & ")"
+    Exit Sub
+
+ErrHandler:
+    Debug.Print PROC & " ERROR " & Err.Number & " – " & Err.Description
+    LogEvt PROC, lgERROR, "Short-name / hover-note failed: " & Err.Description
 End Sub
+
+'-----------------------------------------------------------------
+' Intelligently truncates text with an ellipsis, keeping words when possible.
+'-----------------------------------------------------------------
+Private Function SmartTruncate(txt As String, limit As Long) As String
+    If Len(txt) <= limit Then
+        SmartTruncate = txt
+    Else
+        Dim cut As Long: cut = InStrRev(Left$(txt, limit - 1), " ")
+        If cut < 20 Then cut = limit - 1        'no space or too early? hard cut
+        SmartTruncate = Left$(txt, cut) & "…"
+    End If
+End Function
 
 Private Sub ReorganizeColumns(tbl As ListObject)
     ' Purpose: Moves columns to a predefined order.
@@ -693,4 +775,85 @@ Private Function GetColumnIndex(tbl As ListObject, colName As String) As Long
     Set lc = Nothing
 End Function
 
+' ==========================================================================
+' ===                  TEST/DIAGNOSTIC FUNCTIONS                       ===
+' ==========================================================================
 
+Public Sub Test_DeviceNameTriangles()
+    ' Purpose: Test function to quickly verify red triangle functionality
+    ' without running the entire formatting process
+    On Error GoTo TestError
+    
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    
+    ' Get active sheet and its first table
+    Set ws = ActiveSheet
+    If ws.ListObjects.Count < 1 Then
+        MsgBox "No table found on active sheet. Please select a sheet with a table.", vbExclamation, "Test Failed"
+        Exit Sub
+    End If
+    
+    Set tbl = ws.ListObjects(1)
+    
+    Debug.Print "================================================="
+    Debug.Print "TESTING RED TRIANGLE FUNCTIONALITY"
+    Debug.Print "Table: " & tbl.Name & " on sheet: " & ws.Name
+    Debug.Print "================================================="
+    
+    ' Call with debug mode ON
+    Debug.Print "Calling CreateShortNamesAndComments with default settings..."
+    CreateShortNamesAndComments lo:=tbl, DebugMode:=True
+    
+    MsgBox "Test complete! Check the Immediate window (Ctrl+G) for detailed results." & vbCrLf & vbCrLf & _
+           "If you don't see any red triangles, try these troubleshooting steps:" & vbCrLf & _
+           "1. Make sure your DeviceName column has entries longer than 40 characters" & vbCrLf & _
+           "2. Check Excel settings: File > Options > Advanced > Display > " & vbCrLf & _
+           "   For cells with comments, show: > 'Indicators only (comments on hover)'", _
+           vbInformation, "Red Triangle Test"
+    Exit Sub
+    
+TestError:
+    Debug.Print "ERROR in Test_DeviceNameTriangles: " & Err.Number & " - " & Err.Description
+    MsgBox "Test failed: " & Err.Description, vbCritical, "Test Error"
+End Sub
+
+Public Sub Test_DeviceNameTriangles_ForceAll()
+    ' Purpose: Force triangles on ALL device names by using a very small maxLen
+    ' This is useful to verify the triangle functionality works at all
+    On Error GoTo TestError
+    
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    
+    ' Get active sheet and its first table
+    Set ws = ActiveSheet
+    If ws.ListObjects.Count < 1 Then
+        MsgBox "No table found on active sheet. Please select a sheet with a table.", vbExclamation, "Test Failed"
+        Exit Sub
+    End If
+    
+    Set tbl = ws.ListObjects(1)
+    
+    Debug.Print "================================================="
+    Debug.Print "FORCING RED TRIANGLES ON ALL DEVICE NAMES"
+    Debug.Print "Table: " & tbl.Name & " on sheet: " & ws.Name
+    Debug.Print "Setting maxLen=10 to force triangles on most entries"
+    Debug.Print "================================================="
+    
+    ' Call with debug mode ON and small maxLen to force triangles
+    Debug.Print "Calling CreateShortNamesAndComments with maxLen=10..."
+    CreateShortNamesAndComments lo:=tbl, maxLen:=10, DebugMode:=True
+    
+    MsgBox "Test complete! Check the Immediate window (Ctrl+G) for detailed results." & vbCrLf & vbCrLf & _
+           "This test forced triangles on most device names by limiting to 10 characters." & vbCrLf & _
+           "If you still don't see any red triangles, check Excel settings:" & vbCrLf & _
+           "File > Options > Advanced > Display > " & vbCrLf & _
+           "For cells with comments, show: > 'Indicators only (comments on hover)'", _
+           vbInformation, "Red Triangle Test (Forced)"
+    Exit Sub
+    
+TestError:
+    Debug.Print "ERROR in Test_DeviceNameTriangles_ForceAll: " & Err.Number & " - " & Err.Description
+    MsgBox "Test failed: " & Err.Description, vbCritical, "Test Error"
+End Sub
