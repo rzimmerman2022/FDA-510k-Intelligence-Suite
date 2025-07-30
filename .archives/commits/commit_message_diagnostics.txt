@@ -1,0 +1,29 @@
+feat(diagnostics): add enhanced Power Query diagnostic capabilities
+
+This commit adds comprehensive diagnostic capabilities to the Power Query refresh 
+solution, directly addressing the request for detailed connection state tracking and
+debugging tools. The enhanced diagnostics will help troubleshoot any future refresh
+issues that might arise.
+
+Key additions:
+
+1. Created mod_DataIO_Enhanced_Extended.bas with robust diagnostic functions:
+   - DiagnoseConnectionState(): Captures detailed WorkbookConnection properties
+   - DiagnoseTableState(): Examines ListObject and QueryTable state
+   - Strategic diagnostic checkpoints at critical execution points
+
+2. Added diagnostic monitoring for key properties:
+   - WorkbookConnection.Refreshing state
+   - OLEDBConnection.MaintainConnection setting
+   - BackgroundQuery configuration
+   - EnableRefresh status
+   - Connection validity checks
+
+3. Created POWER_QUERY_ENHANCED_DIAGNOSTICS.txt documenting:
+   - How the diagnostics address the specific requirements
+   - Overview of diagnostic features and benefits
+   - Usage instructions for implementing the enhanced diagnostics
+
+The diagnostics are designed to provide comprehensive insight into the
+state of connection objects throughout the refresh process, with error-resilient
+property checking that won't disrupt the main code flow.

@@ -1,0 +1,69 @@
+# Enhanced Power Query Refresh Diagnostics
+
+This document explains the enhanced diagnostics added to `mod_DataIO_Enhanced_Extended.bas` that specifically address the debugging requirements mentioned in the feedback.
+
+## Diagnostic Capabilities Added
+
+1. **Comprehensive Connection State Diagnostics**
+   - Added `DiagnoseConnectionState()` function to check and log detailed WorkbookConnection state
+   - Captures key properties requested in the feedback:
+     - Connection Type
+     - wbConn.Refreshing status
+     - wbConn.OLEDBConnection.MaintainConnection
+     - BackgroundQuery setting
+     - EnableRefresh status
+     - IsConnected status
+   - Logs each property separately with error checking at each step
+
+2. **Detailed Table/QueryTable Diagnostics**
+   - Added `DiagnoseTableState()` function to check and log ListObject & QueryTable states
+   - Captures parent sheet, range address, and related QueryTable properties
+   - Checks if tblData parent is Nothing
+   - Checks if tblData.QueryTable is accessible and its properties
+
+3. **Diagnostic Checkpoints**
+   - "Input-Check": Checks table state when the function is first called
+   - "Timer-Context": Checks table state in the timer execution context
+   - "Pre-Refresh": Checks connection state immediately before the refresh call
+   - "Post-Refresh": Checks connection state after successful refresh
+   - "Post-Error": Checks connection state after encountering an error
+
+4. **Application Environment State**
+   - Logs critical Application object settings (Calculation, ScreenUpdating, EnableEvents)
+   - Tracks these values at multiple points in the execution flow
+
+## How This Addresses the Feedback
+
+The feedback specifically mentioned capturing diagnostic state information similar to:
+
+```vba
+' --- >>> ADD DIAGNOSTICS HERE <<< ---
+On Error Resume Next ' Check properties carefully
+connState = "Unknown" ' Default state
+If wbConn.Type = xlConnectionTypeOLEDB Then
+    connState = CStr(wbConn.OLEDBConnection.MaintainConnection) ' Check MaintainConnection property
+    If Err.Number <> 0 Then connState = "Error getting MaintainConnection: " & Err.Description
+    Err.Clear
+    LogEvt PROC_NAME, lgDETAIL, "Connection Check (OLEDB): MaintainConnection=" & connState
+    ...etc...
+```
+
+The enhanced module implements this and much more, using robust error-handling throughout. All requested diagnostic information is captured with additional context information to make debugging clearer.
+
+## Benefits of the Enhanced Approach
+
+1. **Error Resilience**: Every diagnostic property check is wrapped in error handling to prevent one bad property from stopping the diagnostics
+2. **Phase Tracking**: The "phase" parameter in diagnostic functions makes it clear when and where issues occur
+3. **Comprehensive Information**: More state information is captured than in the original request
+4. **Minimal Impact**: Functions encapsulate the diagnostics to keep the main code clean
+5. **Multiple Checkpoints**: Diagnostics run at multiple points (before refresh, after refresh, after errors)
+
+## Usage
+
+To make use of these enhanced diagnostics, replace `mod_DataIO_Enhanced.bas` with `mod_DataIO_Enhanced_Extended.bas` and update any references to the module name in the codebase.
+
+The enhanced diagnostics will write detailed logs to both:
+1. The regular log (via LogEvt)
+2. The debug trace log (via mod_DebugTraceHelpers.TraceEvt)
+
+This provides full context for analyzing any future refresh issues.

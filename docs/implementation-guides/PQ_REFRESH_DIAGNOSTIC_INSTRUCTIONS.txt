@@ -1,0 +1,70 @@
+========================================================================
+POWER QUERY REFRESH DIAGNOSTIC TESTS
+========================================================================
+
+OVERVIEW:
+---------
+The mod_TestRefresh.bas module contains three different diagnostic tests to help
+isolate the cause of the "Application-defined or object-defined error" that occurs 
+during Power Query refresh when triggered automatically but not when refreshed manually.
+
+TEST PROCEDURES:
+---------------
+
+1. BASIC ISOLATED TEST - TestRefreshOnly()
+   This is a simple, isolated test that attempts to refresh the connection
+   outside of the normal workflow. It helps determine if the VBA refresh 
+   command works in the simplest possible context.
+
+2. DETAILED TEST WITH OPTIONS - TestRefreshWithOptions() 
+   This provides more diagnostic information in the Immediate Window (Ctrl+G)
+   and tests with specific options that can be controlled in the module.
+
+3. COMPREHENSIVE TEST WITH ALL COMBINATIONS - TestAllOptions()
+   This runs a systematic test of all four combinations of BackgroundQuery 
+   and Calculation Mode settings to identify which configuration works.
+
+HOW TO RUN THE TESTS:
+--------------------
+1. Open the Excel workbook
+2. Press Alt+F11 to open the VBA Editor
+3. In Project Explorer, find and open mod_TestRefresh
+4. Press Alt+F8 to open the Macro dialog
+5. Select one of the three test procedures and click Run
+
+START WITH: TestRefreshOnly
+
+WHAT TO LOOK FOR:
+----------------
+1. Does the test find the connection? It should display a message confirming
+   it found a connection with a name like "pgGet510kData" or "Query - pgGet510kData".
+
+2. Does the test succeed or fail with the same "Application-defined or object-defined error"?
+   - If it SUCCEEDS: This indicates the problem is related to something in the main workflow,
+     not with the refresh mechanism itself.
+   - If it FAILS with the SAME error: The problem is fundamental to any VBA-triggered refresh.
+
+NEXT STEPS BASED ON RESULTS:
+---------------------------
+1. If TestRefreshOnly FAILS:
+   Run TestAllOptions to try all combinations of settings 
+   (Background True/False, Calculation Manual/Automatic)
+
+2. If TestRefreshOnly SUCCEEDS:
+   The issue is likely with the workflow context or timing.
+   Possible solutions:
+   - Add DoEvents before the refresh call
+   - Ensure no sheet operations are happening during refresh
+   - Check if the error occurs during specific circumstances
+
+ADVANCED DIAGNOSTICS:
+-------------------
+In mod_TestRefresh.bas, you can modify the constants at the top:
+
+Private Const OPT_REFRESH_WITH_BACKGROUND_FALSE As Boolean = True
+Private Const OPT_REFRESH_WITH_CALCULATION_MANUAL As Boolean = True
+
+Try changing these to False (one at a time) in TestRefreshWithOptions
+to see if a different configuration helps.
+
+========================================================================

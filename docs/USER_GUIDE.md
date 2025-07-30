@@ -6,7 +6,7 @@ Welcome! This Excel workbook automatically finds, scores, and presents recent FD
 
 ## Getting Started
 
-1.  **Open the File:** Double-click the `.xlsm` workbook file (e.g., `FDA-510k-Intelligence-Suite.xlsm`).
+1.  **Open the File:** Navigate to `assets/excel-workbooks/` and double-click the main `.xlsm` workbook file.
 2.  **Enable Content (IMPORTANT!):** When Excel opens, you will likely see yellow security bars near the top. You **must** click **"Enable Content"** and/or **"Enable Macros"**. If you don't, the automated process will not run.
     * *If you don't see these buttons but the tool doesn't seem to work, check Excel's Trust Center settings (File > Options > Trust Center > Trust Center Settings > Macro Settings & Message Bar settings) or contact the maintainer.*
 3.  **Automatic Processing:** Once content is enabled, the workbook automatically does the following:

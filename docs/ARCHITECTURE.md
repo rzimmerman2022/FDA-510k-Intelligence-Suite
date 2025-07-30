@@ -70,71 +70,62 @@ This tool automates the retrieval, scoring, and presentation of FDA 510(k) clear
     *   Stores verbose trace messages if enabled via constants in that module.
     *   Columns: `Timestamp`, `Level`, `Procedure`, `Message`, `Details`.
 
-### 3.4. VBA Modules (Refactored Structure)
+### 3.4. VBA Modules (Gold Standard Organization)
 
-*   **`ThisWorkbook` (Class Module):**
-    *   Source: `src/vba/ThisWorkbook.cls`
-    *   Handles workbook events.
-    *   `Workbook_Open()`: Entry point, calls `mod_DataIO.RefreshPowerQuery` then `mod_510k_Processor.ProcessMonthly510k`.
-    *   `Workbook_BeforeClose()`: Calls `mod_Logger.TrimRunLog`.
-*   **`mod_Config`:**
-    *   Source: `src/vba/mod_Config.bas`
-    *   Central repository for **all** global `Public Const` values (sheet names, API paths, scoring defaults, version info, maintainer username, etc.). No procedural code.
-*   **`mod_DataIO`:**
-    *   Source: `src/vba/mod_DataIO.bas`
-    *   Handles data input/output.
-    *   `RefreshPowerQuery()`: Manages the Power Query refresh process, including enabling/disabling refresh.
-    *   `SheetExists()`: Checks if a sheet exists.
-    *   `CleanupDuplicateConnections()`: Removes duplicate PQ connections after sheet copy.
-    *   `ArrayToTable()`: Writes VBA array data back to an Excel table.
-*   **`mod_Schema`:**
-    *   Source: `src/vba/mod_Schema.bas`
-    *   Manages table structure understanding.
-    *   `GetColumnIndices()`: Creates map of header names to column indices, handles duplicates, checks required columns.
-    *   `SafeGetString()`, `SafeGetVariant()`, `SafeGetColIndex()`: Safely access data/indices using the column map.
-    *   `ColumnExistsInMap()`: Helper to check for column existence in the map.
-*   **`mod_Weights`:**
-    *   Source: `src/vba/mod_Weights.bas`
-    *   Loads and provides access to scoring parameters.
-    *   `LoadAll()`: Reads all tables from the `Weights` sheet into memory (dictionaries/collections).
-    *   `GetACWeights()`, `GetSTWeights()`, `GetPCWeights()`, `GetHighValueKeywords()`, etc.: Public functions to access the loaded data.
-*   **`mod_Score`:**
-    *   Source: `src/vba/mod_Score.bas`
-    *   Contains the core scoring algorithm.
-    *   `Calculate510kScore()`: Calculates score for one row using data from `mod_Schema`, weights/keywords from `mod_Weights`, and defaults/rules from `mod_Config`. Uses `CheckKeywords` helper.
-*   **`mod_Cache`:**
-    *   Source: `src/vba/mod_Cache.bas`
-    *   Manages the company recap cache.
-    *   `LoadCompanyCache()`, `SaveCompanyCache()`: Interact with the `CompanyCache` sheet.
-    *   `GetCompanyRecap()`: Retrieves recap from memory or calls `GetCompanyRecapOpenAI()`.
-    *   `GetCompanyRecapOpenAI()`: Handles optional OpenAI API call (requires API key file defined in `mod_Config`).
-*   **`mod_Format`:**
-    *   Source: `src/vba/mod_Format.bas`
-    *   Applies all visual formatting to the `CurrentMonthData` table.
-    *   `ApplyAll()`: Orchestrates calls to private helpers.
-    *   Helpers: `DeleteDuplicateColumns()`, `ApplyNumberFormats()`, `FormatTableLook()`, `FormatCategoryColors()`, `ReorganizeColumns()`, `SortDataTable()`, `FreezeHeaderAndFirstColumns()` (currently disabled).
-*   **`mod_Archive`:**
-    *   Source: `src/vba/mod_Archive.bas`
-    *   Handles creation of monthly archive sheets.
-    *   `ArchiveIfNeeded()`: Copies the data sheet, renames it, converts table to range, calls `mod_DataIO.CleanupDuplicateConnections`.
-*   **`mod_Logger`:**
-    *   Source: `src/vba/mod_Logger.bas`
-    *   Provides buffered logging to the `RunLog` sheet.
-    *   `LogEvt()`, `FlushLogBuf()`, `TrimRunLog()`. Includes `DebugModeOn()` check based on maintainer status (`mod_Utils`) and `DebugMode` named range.
-*   **`mod_DebugTraceHelpers`:**
-    *   Source: `src/vba/mod_DebugTraceHelpers.bas`
-    *   Provides conditional, verbose tracing to the `DebugTrace` sheet. Controlled by constants within the module.
-    *   `TraceEvt()`, `ClearDebugTrace()`.
-*   **`mod_Debug`:**
-    *   Source: `src/vba/mod_Debug.bas`
-    *   Contains older/simpler debugging utilities (`DumpHeaders`, `DebugTrace`). Potential candidate for refactoring/removal.
-*   **`mod_Utils`:**
-    *   Source: `src/vba/mod_Utils.bas`
-    *   Contains miscellaneous helper functions.
-    *   `GetWorksheets()`, `IsMaintainerUser()`, `EnsureUIOn()`, `GetBrightness()`.
-*   **`ModuleManager`:**
-    *   Source: `src/vba/ModuleManager.bas`
-    *   Provides utilities for exporting/importing VBA code modules for version control. Requires VBE references.
+#### **Core Business Logic** (`src/vba/core/`)
+*   **`mod_510k_Processor.bas`:**
+    *   Main processing orchestration and workflow management
+    *   `ProcessMonthly510k()`: Primary entry point for data processing pipeline
+*   **`mod_Archive.bas`:**
+    *   Monthly archive sheet creation and management
+    *   `ArchiveIfNeeded()`: Copies data sheet, converts to static values
+*   **`mod_Cache.bas`:**
+    *   Company recap caching system with OpenAI integration
+    *   `LoadCompanyCache()`, `SaveCompanyCache()`, `GetCompanyRecap()`
+*   **`mod_Schema.bas`:**
+    *   Table structure management and safe data access
+    *   `GetColumnIndices()`, `SafeGetString()`, `SafeGetVariant()`
+*   **`mod_Score.bas`:**
+    *   Core FDA 510(k) scoring algorithm implementation
+    *   `Calculate510kScore()`: Multi-factor scoring with configurable weights
+*   **`mod_Weights.bas`:**
+    *   Scoring parameter loading and management from Excel tables
+    *   `LoadAll()`, `GetACWeights()`, `GetSTWeights()`, `GetPCWeights()`
+
+#### **Shared Utilities** (`src/vba/utilities/`)
+*   **`mod_Config.bas`:**
+    *   Global configuration constants and system settings
+    *   Maintainer settings, API paths, sheet names, defaults
+*   **`mod_DataIO.bas`:**
+    *   Data input/output operations and Power Query management
+    *   `RefreshPowerQuery()`, `SheetExists()`, `ArrayToTable()`
+*   **`mod_Format.bas`:**
+    *   Visual formatting, styling, and UI operations
+    *   `ApplyAll()`, column management, conditional formatting
+*   **`mod_Utils.bas`:**
+    *   Miscellaneous helper functions and utilities
+    *   `GetWorksheets()`, `IsMaintainerUser()`, `EnsureUIOn()`
+*   **Debug & Logging Modules:**
+    *   `mod_Debug.bas`: Legacy debugging utilities
+    *   `mod_Logger.bas`: Buffered logging to RunLog sheet
+    *   `mod_DebugColumnTrace.bas`: Column-specific debugging
+    *   `mod_DebugTraceHelpers.bas`: Verbose trace system
+    *   `mod_DirectTrace.bas`: Direct trace utilities
+    *   `mod_ColumnDebugger.bas`: Column debugging tools
+    *   `StandaloneDebug.bas`: Standalone debug functions
+
+#### **Application Modules** (`src/vba/modules/`)
+*   **`ThisWorkbook.cls`:**
+    *   Workbook event handlers (Open, BeforeClose)
+    *   Primary application entry points
+*   **`mod_RefreshSolutions.bas`:**
+    *   Power Query refresh solutions and connection management
+*   **`mod_TestRefresh.bas`:**
+    *   Test utilities for refresh operations
+*   **`mod_TestWithContext.bas`:**
+    *   Context-aware testing functionality
+*   **`ModuleManager.bas`:**
+    *   VBA code export/import for version control
 
 ## 4. Data Flow & Workflow (Updated)
 
