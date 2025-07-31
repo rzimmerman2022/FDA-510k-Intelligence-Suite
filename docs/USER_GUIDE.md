@@ -6,10 +6,27 @@ Welcome! This Excel workbook automatically finds, scores, and presents recent FD
 
 ## Getting Started
 
-1.  **Open the File:** Navigate to `assets/excel-workbooks/` and double-click the main `.xlsm` workbook file.
-2.  **Enable Content (IMPORTANT!):** When Excel opens, you will likely see yellow security bars near the top. You **must** click **"Enable Content"** and/or **"Enable Macros"**. If you don't, the automated process will not run.
-    * *If you don't see these buttons but the tool doesn't seem to work, check Excel's Trust Center settings (File > Options > Trust Center > Trust Center Settings > Macro Settings & Message Bar settings) or contact the maintainer.*
-3.  **Automatic Processing:** Once content is enabled, the workbook automatically does the following:
+### Installation
+1. **Get the Built Application:** 
+   - If you received the application from an administrator, navigate to the provided folder
+   - If building from source, run the build process first:
+     ```bash
+     npm run build
+     ```
+   - The built workbook will be in the `dist/` folder
+
+2. **First-Time Setup:**
+   - Open the `.xlsm` file from the distribution folder
+   - **Enable Content (IMPORTANT!):** Click **"Enable Content"** and/or **"Enable Macros"** when prompted
+   - The application is pre-configured with your username and settings
+
+3. **Optional: OpenAI Integration** (for enhanced company summaries)
+   - Locate the file: `%APPDATA%\510k_Tool\openai_key.txt`
+   - Replace the placeholder with your actual OpenAI API key
+   - Get an API key from: https://platform.openai.com/api-keys
+
+### How It Works
+Once content is enabled, the workbook automatically:
     * **Refreshes Data:** It connects to the FDA database to get the latest data for the *previous* full month. You'll see messages in the bottom status bar like "Refreshing FDA data...".
     * **Scores & Formats:** It then calculates scores, generates company summaries (where possible), and formats the main sheet. You'll see status bar messages like "Processing leads...". This step might be skipped if it's late in the month (after the 5th) - this is normal.
     * **Archives (Monthly):** On the first run within the first few days of a new month, it automatically creates a backup sheet (e.g., "Apr-2025") of the previous month's final data.

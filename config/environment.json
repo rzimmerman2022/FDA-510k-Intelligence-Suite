@@ -1,0 +1,53 @@
+{
+  "environments": {
+    "development": {
+      "debug": true,
+      "logging": {
+        "level": "DEBUG",
+        "verboseErrors": true
+      },
+      "features": {
+        "autoRefresh": false,
+        "autoArchive": false,
+        "testMode": true
+      },
+      "api": {
+        "mockResponses": false,
+        "timeout": 120000
+      }
+    },
+    "staging": {
+      "debug": false,
+      "logging": {
+        "level": "INFO",
+        "verboseErrors": true
+      },
+      "features": {
+        "autoRefresh": true,
+        "autoArchive": true,
+        "testMode": false
+      },
+      "api": {
+        "mockResponses": false,
+        "timeout": 180000
+      }
+    },
+    "production": {
+      "debug": false,
+      "logging": {
+        "level": "WARNING",
+        "verboseErrors": false
+      },
+      "features": {
+        "autoRefresh": true,
+        "autoArchive": true,
+        "testMode": false
+      },
+      "api": {
+        "mockResponses": false,
+        "timeout": 300000
+      }
+    }
+  },
+  "current": "production"
+}

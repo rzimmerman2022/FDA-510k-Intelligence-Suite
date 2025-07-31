@@ -1,0 +1,101 @@
+{
+  "application": {
+    "name": "FDA 510(k) Intelligence Suite",
+    "version": "1.9",
+    "description": "Professional-grade FDA 510(k) clearance data analysis tool",
+    "author": "Ryan Zimmerman",
+    "maintainer": "Ryan"
+  },
+  "api": {
+    "openFDA": {
+      "baseUrl": "https://api.fda.gov/device/510k.json",
+      "recordLimit": 1000,
+      "timeout": 300000,
+      "retryAttempts": 3,
+      "retryDelay": 5000
+    },
+    "openAI": {
+      "enabled": true,
+      "apiUrl": "https://api.openai.com/v1/chat/completions",
+      "model": "gpt-3.5-turbo",
+      "maxTokens": 100,
+      "temperature": 0.7,
+      "timeout": 60000,
+      "keyPath": "%APPDATA%\\510k_Tool\\openai_key.txt"
+    }
+  },
+  "scoring": {
+    "weights": {
+      "defaultAC": 0.2,
+      "defaultPC": 0.2,
+      "defaultST": 0.6,
+      "defaultPT": 0.5,
+      "highKeyword": 0.85,
+      "lowKeyword": 0.2,
+      "usGeography": 0.6,
+      "otherGeography": 0.5
+    },
+    "negativeFactors": {
+      "cosmetic": -2.0,
+      "diagnostic": -0.2
+    },
+    "bonuses": {
+      "synergy": 0.15,
+      "therapeuticMatch": 0.1
+    },
+    "thresholds": {
+      "highScore": 0.8,
+      "mediumScore": 0.5,
+      "processingTimeDays": 162
+    }
+  },
+  "excel": {
+    "sheets": {
+      "data": "CurrentMonthData",
+      "weights": "Weights",
+      "cache": "CompanyCache",
+      "log": "RunLog"
+    },
+    "tables": {
+      "acWeights": "ACWeights",
+      "pcWeights": "PCWeights",
+      "stWeights": "STWeights",
+      "highValueKeywords": "HighValueKeywords",
+      "nfCosmeticKeywords": "NFCosmeticKeywords",
+      "nfDiagnosticKeywords": "NFDiagnosticKeywords",
+      "therapeuticKeywords": "TherapeuticKeywords"
+    },
+    "formatting": {
+      "maxDeviceNameLength": 75,
+      "ellipsis": "...",
+      "dateFormat": "mm/dd/yyyy",
+      "scoreDecimalPlaces": 2,
+      "columnAutoFit": true
+    }
+  },
+  "logging": {
+    "enabled": true,
+    "level": "INFO",
+    "maxEntries": 10000,
+    "autoCleanup": true,
+    "cleanupThreshold": 9000
+  },
+  "features": {
+    "autoRefresh": true,
+    "autoArchive": true,
+    "companyCache": true,
+    "debugMode": false,
+    "maintainerOnly": [
+      "openAI",
+      "debugMode",
+      "advancedLogging"
+    ]
+  },
+  "performance": {
+    "batchSize": 100,
+    "progressUpdateInterval": 10,
+    "calculationMode": "manual",
+    "screenUpdating": false,
+    "eventHandling": false
+  }
+}

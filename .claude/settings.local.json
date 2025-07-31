@@ -8,7 +8,11 @@
       "Bash(mv:*)",
       "Bash(rmdir:*)",
       "Bash(rm:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(cmd /c:*)",
+      "Bash(powershell:*)"
     ],
     "deny": []
   }

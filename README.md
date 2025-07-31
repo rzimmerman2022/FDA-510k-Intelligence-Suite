@@ -6,21 +6,43 @@ Automated fetching, scoring, caching, and archiving of FDA 510(k) clearance data
 
 ## 🚀 Quick Start
 
+### Prerequisites
+- Microsoft Excel 2016+ with VBA and Power Query support
+- Windows 10+ operating system
+- Internet connection for FDA API access
+
+### Installation
+
 1. **Clone the Repository**
    ```bash
    git clone https://github.com/rzimmerman2022/FDA-510k-Intelligence-Suite.git
    cd FDA-510k-Intelligence-Suite
    ```
 
-2. **Open the Main Workbook**
-   - Navigate to `assets/excel-workbooks/`
-   - Open the main `.xlsm` file
+2. **Build the Application**
+   ```bash
+   # Windows Command Prompt
+   scripts\build\build.bat
+   
+   # Or PowerShell
+   .\scripts\build\build.ps1
+   ```
+
+3. **Open the Built Workbook**
+   - Navigate to `dist/` folder (created by build)
+   - Open the versioned `.xlsm` file
    - Enable macros and content when prompted
 
-3. **Configure Your Settings**
-   - Set your username in `src/vba/utilities/mod_Config.bas`
+4. **Configure Your Settings**
+   - The build process automatically configures your username
    - Configure scoring weights in the Excel `Weights` sheet
-   - (Optional) Set up OpenAI API for company summaries
+   - (Optional) Set up OpenAI API key for company summaries
+
+### Optional: OpenAI Integration
+For automated company summaries, add your API key:
+1. Open: `%APPDATA%\510k_Tool\openai_key.txt`
+2. Replace placeholder with your actual OpenAI API key
+3. Get API key from: https://platform.openai.com/api-keys
 
 ## 📁 Repository Structure
 
@@ -82,49 +104,56 @@ FDA-510k-Intelligence-Suite/
 
 ## 🛠️ Development Workflow
 
-### **VBA Module Organization**
+### **Project Structure**
 ```
-src/vba/
-├── core/                         # Business Logic
-│   ├── mod_510k_Processor.bas    # Main processing orchestration
-│   ├── mod_Archive.bas           # Archive management
-│   ├── mod_Cache.bas             # Company data caching
-│   ├── mod_Schema.bas            # Data schema management
-│   ├── mod_Score.bas             # Scoring algorithm
-│   └── mod_Weights.bas           # Weight configuration
-├── utilities/                    # Shared Utilities
-│   ├── mod_Config.bas            # Global configuration
-│   ├── mod_DataIO.bas            # Data input/output operations
-│   ├── mod_Format.bas            # Formatting and UI
-│   ├── mod_Utils.bas             # General utilities
-│   └── mod_*Debug*.bas           # Debug and logging utilities
-└── modules/                      # Application Modules
-    ├── mod_RefreshSolutions.bas  # Power Query refresh solutions
-    ├── ModuleManager.bas         # VBA code management
-    └── ThisWorkbook.cls          # Workbook event handlers
+FDA-510k-Intelligence-Suite/
+├── assets/excel-workbooks/       # Source Excel files
+├── config/                       # Configuration files (JSON)
+├── docs/                         # Documentation
+├── scripts/                      # Build and deployment automation
+│   ├── build/                    # Build scripts (PowerShell + Batch)
+│   └── deploy/                   # Deployment scripts
+├── src/                          # Source code
+│   ├── powerquery/               # Power Query (.pq) files  
+│   └── vba/                      # VBA modules
+│       ├── core/                 # Business logic
+│       ├── utilities/            # Shared utilities
+│       └── modules/              # Application modules
+└── tests/                        # Test files
 ```
 
-### **Running Tests**
+### **Build Commands**
 ```bash
-# Unit tests
-cd tests/unit
-# Open test files in Excel VBA editor
+# Build for production
+npm run build
 
-# Integration tests  
-cd tests/integration
-# Follow test documentation in docs/technical-specs/
+# Build with debug modules
+npm run build:debug
+
+# Clean build artifacts
+npm run clean
 ```
 
-### **Build Process**
+### **Deployment**
 ```bash
-# Development build
-cd scripts/build
-# Run build scripts as documented
+# Deploy to specific location
+scripts\deploy\deploy.bat "C:\Path\To\Deployment"
 
-# Production deployment
-cd scripts/deploy  
-# Follow deployment guides in docs/implementation-guides/
+# Deploy with PowerShell (more options)
+.\scripts\deploy\deploy.ps1 -DeploymentPath "C:\Path" -CreateBackup:$true
 ```
+
+### **Development Setup**
+1. Make changes to VBA files in `src/vba/`
+2. Update Power Query in `src/powerquery/`
+3. Build using `npm run build`
+4. Test the built workbook from `dist/` folder
+5. Deploy to target environment
+
+### **Testing**
+- Unit tests: Located in `tests/unit/`
+- Integration tests: Located in `tests/integration/`  
+- Manual testing: Use built workbook in `dist/` folder
 
 ## 📊 System Requirements
 
@@ -138,15 +167,35 @@ cd scripts/deploy
 
 ## 🔐 Configuration
 
-### **Required Setup**
-1. **Maintainer Username**: Update `MAINTAINER_USERNAME` in `src/vba/utilities/mod_Config.bas`
-2. **Scoring Parameters**: Configure tables in Excel `Weights` sheet
-3. **API Endpoints**: Verify openFDA API configuration
+### **Automated Configuration**
+The build process automatically configures:
+- ✅ Maintainer username (from system)
+- ✅ API key directory structure  
+- ✅ Default scoring parameters
+- ✅ Logging and debug settings
 
-### **Optional Features**
-- **OpenAI Integration**: Set API key for automated company summaries
-- **Advanced Logging**: Configure debug modes and trace levels
-- **Custom Formatting**: Adjust UI constants and formatting rules
+### **Manual Configuration**
+Configure these settings in Excel after building:
+
+1. **Scoring Weights** (Required)
+   - Open the built workbook
+   - Navigate to `Weights` sheet
+   - Update scoring tables as needed
+
+2. **OpenAI API Key** (Optional)
+   - File location: `%APPDATA%\510k_Tool\openai_key.txt`
+   - Required only for automated company summaries
+   - Get key from: https://platform.openai.com/api-keys
+
+3. **Advanced Settings** (Optional)
+   - Debug modes: Set in VBA `mod_Config.bas`
+   - Custom formatting: Adjust constants in modules
+   - Logging levels: Configure in application settings
+
+### **Configuration Files**
+- `config/app.config.json` - Application settings reference
+- `config/environment.json` - Environment-specific settings
+- `package.json` - Project metadata and scripts
 
 ## 📖 Documentation
 

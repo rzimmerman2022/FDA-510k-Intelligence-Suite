@@ -37,7 +37,7 @@ Option Explicit
 
 ' --- Essential Configuration ---
 ' *** IMPORTANT: SET YOUR WINDOWS USERNAME FOR MAINTAINER FEATURES (e.g., OpenAI, DebugMode) ***
-Public Const MAINTAINER_USERNAME As String = "YourWindowsUsername" ' <<< UPDATE THIS
+Public Const MAINTAINER_USERNAME As String = "Ryan" ' Updated by system
 
 ' *** Double-check these names match your Excel objects ***
 Public Const DATA_SHEET_NAME As String = "CurrentMonthData"  ' Sheet where Power Query loads data
