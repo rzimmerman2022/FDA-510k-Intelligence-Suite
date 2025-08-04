@@ -1,8 +1,31 @@
+```
+ █████╗ ██████╗  ██████╗██╗  ██╗██╗████████╗███████╗ ██████╗████████╗██╗   ██╗██████╗ ███████╗
+██╔══██╗██╔══██╗██╔════╝██║  ██║██║╚══██╔══╝██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔══██╗██╔════╝
+███████║██████╔╝██║     ███████║██║   ██║   █████╗  ██║        ██║   ██║   ██║██████╔╝█████╗  
+██╔══██║██╔══██╗██║     ██╔══██║██║   ██║   ██╔══╝  ██║        ██║   ██║   ██║██╔══██╗██╔══╝  
+██║  ██║██║  ██║╚██████╗██║  ██║██║   ██║   ███████╗╚██████╗   ██║   ╚██████╔╝██║  ██║███████╗
+╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝   ╚═╝   ╚══════╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝
+```
+
 # Architecture Overview - FDA 510(k) Intelligence Suite
 
-## 1. High-Level Goal
+> **A comprehensive technical guide for developers and AI assistants working with the FDA 510(k) Intelligence Suite**
 
-This tool automates the retrieval, scoring, and presentation of FDA 510(k) clearance data within a single Microsoft Excel workbook (`.xlsm`). The primary goal is to provide actionable intelligence on recent clearances based on a configurable scoring model, minimizing manual data handling and analysis.
+## 1. System Overview
+
+The FDA 510(k) Intelligence Suite is an enterprise Excel-based solution that automates the entire workflow of fetching, analyzing, and scoring FDA medical device clearances. Built on a modular VBA architecture with Power Query integration, it provides regulatory intelligence teams with prioritized, actionable insights on recent 510(k) clearances.
+
+### 1.1 Key Value Propositions
+- **Automated Data Pipeline**: Zero-touch monthly data refresh from FDA's official API
+- **Intelligent Scoring**: Multi-factor algorithm identifies high-value opportunities
+- **Company Intelligence**: Cached insights with optional AI-powered summaries
+- **Enterprise Ready**: Robust error handling, logging, and maintainer controls
+
+### 1.2 Technical Philosophy
+- **Modular Design**: Each VBA module has a single responsibility
+- **Error Resilience**: Every procedure includes comprehensive error handling
+- **Performance First**: Array processing and minimal worksheet interactions
+- **AI Maintainable**: Clear naming, extensive comments, predictable patterns
 
 ## 2. Core Technologies
 
@@ -15,13 +38,106 @@ This tool automates the retrieval, scoring, and presentation of FDA 510(k) clear
 *   **WScript.Shell (VBA References):** Used for expanding environment strings (`%APPDATA%`) in file paths.
 *   **VBIDE (VBA References):** Used by `ModuleManager` for interacting with the VBA project itself (exporting/importing components).
 
-## 3. Key Components
+## 3. Data Flow Architecture
 
-### 3.1. Excel Workbook (`FDA-510k-Intelligence-Suite.xlsm`)
+### 3.1 Visual Flow Diagram
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  OpenFDA API    │────▶│  Power Query     │────▶│ CurrentMonthData│
+│ (Previous Month)│     │  (FDA_510k_Query)│     │    (Sheet)      │
+└─────────────────┘     └──────────────────┘     └────────┬────────┘
+                                                           │
+                        ┌──────────────────────────────────▼────────┐
+                        │         VBA Processing Pipeline           │
+                        │  ┌────────────┐  ┌──────────────────┐   │
+                        │  │   Weights  │  │  Company Cache   │   │
+                        │  │  (Tables)  │  │   (Local DB)     │   │
+                        │  └──────┬─────┘  └────────┬─────────┘   │
+                        │         │                 │              │
+                        │  ┌──────▼─────────────────▼──────────┐  │
+                        │  │      Scoring Algorithm            │  │
+                        │  │  - AC/PC/ST Weights              │  │
+                        │  │  - Keyword Matching              │  │
+                        │  │  - Negative Factors              │  │
+                        │  │  - Synergy Bonuses               │  │
+                        │  └────────────┬──────────────────────┘  │
+                        └───────────────┼──────────────────────────┘
+                                       │
+                        ┌──────────────▼──────────────┐
+                        │     Formatted Output        │
+                        │  - Conditional Formatting   │
+                        │  - Smart Column Layout     │
+                        │  - Device Name Truncation   │
+                        └──────────────┬──────────────┘
+                                       │
+                        ┌──────────────▼──────────────┐
+                        │   Optional: Archive Sheet   │
+                        │   (Monthly Static Copy)     │
+                        └─────────────────────────────┘
+```
+
+### 3.2 Processing Sequence (For AI Understanding)
+
+```vba
+' STEP 1: Workbook Opens
+Private Sub Workbook_Open()
+    Call ProcessMonthly510k  ' Entry point
+End Sub
+
+' STEP 2: Main Orchestration
+Public Sub ProcessMonthly510k()
+    ' 2.1 Initialize environment
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    
+    ' 2.2 Refresh data from FDA
+    Call RefreshPowerQuery("Query - pgGet510kData")
+    
+    ' 2.3 Load configuration
+    Call mod_Weights.LoadAll()
+    
+    ' 2.4 Process each record
+    For Each record In dataTable
+        score = Calculate510kScore(record)
+        recap = GetCompanyRecap(record.Applicant)
+        ' Write results back
+    Next
+    
+    ' 2.5 Apply formatting
+    Call ApplyConditionalFormatting()
+    
+    ' 2.6 Archive if needed
+    Call ArchiveIfNeeded()
+End Sub
+```
+
+### 3.3 Key Data Transformations
+
+1. **Raw API Data → Structured Table**
+   - JSON response parsed by Power Query
+   - Date strings converted to Excel dates
+   - Processing time calculated (DecisionDate - ReceivedDate)
+   - FDA link constructed from K_Number
+
+2. **Structured Table → Scored Dataset**
+   - Each row evaluated against weight tables
+   - Keywords matched using array comparison
+   - Negative factors applied conditionally
+   - Final score calculated and categorized
+
+3. **Scored Dataset → Presentation Layer**
+   - Conditional formatting based on score ranges
+   - Device names truncated for display
+   - Company recaps fetched/generated
+   - Archive snapshot created monthly
+
+## 4. Key Components
+
+### 4.1. Excel Workbook (`FDA-510k-Intelligence-Suite.xlsm`)
 
 *   The main container file holding all sheets, code, tables, and connections.
 
-### 3.2. Power Query (`Query - pgGet510kData` or similar)
+### 4.2. Power Query (`Query - pgGet510kData` or similar)
 
 *   **Source:** `src/powerquery/FDA_510k_Query.pq` (for reference)
 *   **Trigger:** Refreshed by VBA (`mod_DataIO.RefreshPowerQuery` function) during the `Workbook_Open` event.
@@ -40,7 +156,7 @@ This tool automates the retrieval, scoring, and presentation of FDA 510(k) clear
     *   Sorts data by `DecisionDate` descending.
     *   Loads the resulting table into the `CurrentMonthData` sheet, overwriting previous content.
 
-### 3.3. Excel Sheets
+### 4.3. Excel Sheets
 
 *   **`CurrentMonthData`:**
     *   Target for the Power Query output.
@@ -70,7 +186,14 @@ This tool automates the retrieval, scoring, and presentation of FDA 510(k) clear
     *   Stores verbose trace messages if enabled via constants in that module.
     *   Columns: `Timestamp`, `Level`, `Procedure`, `Message`, `Details`.
 
-### 3.4. VBA Modules (Gold Standard Organization)
+### 4.4. VBA Modules (Gold Standard Organization)
+
+**IMPORTANT FOR AI ASSISTANTS**: Each module follows strict patterns:
+- `Option Explicit` always at top
+- Error handlers in every public procedure
+- Cleanup code in dedicated labels
+- Module-level constants for configuration
+- Clear separation of public API vs private implementation
 
 #### **Core Business Logic** (`src/vba/core/`)
 *   **`mod_510k_Processor.bas`:**
@@ -183,3 +306,95 @@ This tool automates the retrieval, scoring, and presentation of FDA 510(k) clear
 *   **Scalability:** Performance might degrade with extremely large numbers of keywords or cache entries, although array processing helps significantly.
 *   **Cross-Platform:** Developed/tested primarily on Windows; Mac compatibility may vary (especially regarding `Environ`, `WScript.Shell`, `MSXML`, file paths, VBE Extensibility).
 *   **Hardcoded Paths in `ModuleManager`:** The `ModuleManager.bas` utility uses hardcoded paths that need manual adjustment if used.
+
+## 9. AI Assistant Development Guide
+
+### 9.1 Common Code Patterns
+
+#### Error Handling Pattern
+```vba
+Public Sub StandardProcedure()
+    On Error GoTo ErrorHandler
+    Dim cleanup As Boolean: cleanup = False
+    
+    ' Main logic here
+    cleanup = True
+    
+CleanExit:
+    If cleanup Then
+        ' Cleanup code
+        Set obj = Nothing
+    End If
+    Exit Sub
+    
+ErrorHandler:
+    LogEvt "Error in StandardProcedure", lgERROR, Err.Description
+    Resume CleanExit
+End Sub
+```
+
+#### Array Processing Pattern
+```vba
+' GOOD: Process in memory
+Dim dataArr As Variant
+dataArr = ws.Range("A1:Z1000").Value
+
+For i = 1 To UBound(dataArr, 1)
+    ' Process dataArr(i, columnIndex)
+Next i
+
+ws.Range("A1:Z1000").Value = dataArr
+
+' BAD: Cell-by-cell access
+For i = 1 To 1000
+    ws.Cells(i, 1).Value = ProcessValue(ws.Cells(i, 2).Value)
+Next i
+```
+
+#### Dictionary Usage Pattern
+```vba
+Dim dict As Object
+Set dict = CreateObject("Scripting.Dictionary")
+dict.CompareMode = vbTextCompare ' Case-insensitive
+
+' Add items
+If Not dict.Exists(key) Then
+    dict.Add key, value
+End If
+
+' Clean up
+Set dict = Nothing
+```
+
+### 9.2 Module Interaction Rules
+
+1. **Never bypass the public API** - Always call public procedures
+2. **Respect module boundaries** - Don't access private variables
+3. **Use proper cleanup** - Set objects to Nothing
+4. **Log all errors** - Use LogEvt for error tracking
+5. **Test with arrays** - Minimize worksheet interactions
+
+### 9.3 Performance Guidelines
+
+| Operation | Good Practice | Bad Practice |
+|-----------|--------------|--------------|
+| Reading Data | `arr = Range.Value` | `For Each Cell In Range` |
+| Writing Data | `Range.Value = arr` | `Cell.Value = x` (in loop) |
+| Finding Data | `Application.Match()` | Loop through cells |
+| Sorting | Use Excel's built-in sort | Bubble sort in VBA |
+
+### 9.4 Debugging Tips
+
+1. **Enable debug mode**: Set `DEBUG_MODE = True` in mod_Config
+2. **Check RunLog sheet**: All errors are logged there
+3. **Use immediate window**: `Debug.Print` key variables
+4. **Step through code**: F8 in VBA editor
+5. **Check array bounds**: Common source of errors
+
+### 9.5 Common Pitfalls to Avoid
+
+- **Don't assume sheet exists** - Always check with error handling
+- **Don't hardcode paths** - Use configuration constants
+- **Don't skip cleanup** - Memory leaks crash Excel
+- **Don't ignore errors** - Log and handle gracefully
+- **Don't mix data types** - Variant arrays need careful handling
