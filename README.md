@@ -133,11 +133,10 @@ Final Score = Sum(All_Factors)
 ```
 FDA-510k-Intelligence-Suite/
 ├── assets/                       # Binary assets and workbooks
-│   └── excel-workbooks/          # Main Excel files (.xlsm)
+│   └── excel-workbooks/          # Main Excel application file (.xlsm)
 ├── config/                       # Configuration files
 ├── docs/                         # Documentation
 │   ├── images/                   # Documentation images
-│   ├── implementation-guides/    # Implementation and setup guides
 │   └── technical-specs/          # Technical specifications
 ├── samples/                      # Sample data and outputs
 ├── scripts/                      # Build and deployment scripts
@@ -149,9 +148,13 @@ FDA-510k-Intelligence-Suite/
 │       ├── core/                 # Core business logic modules
 │       ├── modules/              # Application-specific modules
 │       └── utilities/            # Utility and helper modules
-└── tests/                        # Test files
-    ├── integration/              # Integration tests
-    └── unit/                     # Unit tests
+├── tests/                        # Test files
+│   ├── integration/              # Integration tests
+│   └── unit/                     # Unit tests
+└── archive/                      # Archived files from cleanup
+    ├── experimental/             # Development and debug files
+    ├── redundant/                # Duplicate/superseded files
+    └── deprecated/               # Deprecated functionality
 ```
 
 ## 🔧 Core Features
@@ -242,7 +245,7 @@ FDA-510k-Intelligence-Suite/
 ├── docs/                         # Documentation
 │   ├── ARCHITECTURE.md          # System design details
 │   ├── AI_DEVELOPMENT_GUIDE.md # AI coding guidelines
-│   └── implementation-guides/   # Step-by-step guides
+│   └── technical-specs/         # Technical specifications
 ├── scripts/                      # Automation scripts
 │   ├── build/                   # Build process
 │   │   ├── build.ps1           # PowerShell build script
@@ -351,7 +354,7 @@ Configure these settings in Excel after building:
 - **[Architecture Guide](docs/ARCHITECTURE.md)**: System design and component relationships
 - **[Development Guide](docs/AI_DEVELOPMENT_GUIDE.md)**: Coding standards and AI assistance guidelines  
 - **[User Guide](docs/USER_GUIDE.md)**: End-user operation instructions
-- **[Implementation Guides](docs/implementation-guides/)**: Setup and deployment instructions
+- **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)**: Setup and deployment instructions
 - **[Technical Specifications](docs/technical-specs/)**: Detailed technical documentation
 
 ## 💡 Important Notes for AI Assistants
