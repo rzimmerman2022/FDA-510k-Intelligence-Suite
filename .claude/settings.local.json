@@ -15,7 +15,8 @@
       "Bash(powershell:*)",
       "Bash(dir:*)",
       "Bash(git checkout:*)",
-      "Bash(move:*)"
+      "Bash(move:*)",
+      "Bash(git stash:*)"
     ],
     "deny": []
   }
